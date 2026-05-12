@@ -1,0 +1,322 @@
+// Gym Trainer & Client Transformation Management — PostgreSQL schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TRAINER
+  CLIENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum TrainerAttendanceStatus {
+  PRESENT
+  ABSENT
+  RESCHEDULED
+}
+
+enum ClientAttendanceStatus {
+  PENDING
+  PRESENT
+  ABSENT
+  RESCHEDULED
+}
+
+enum ProgressPhotoType {
+  BEFORE
+  AFTER
+  WEEKLY
+}
+
+enum NotificationType {
+  MEMBERSHIP_EXPIRING
+  WORKOUT_UPDATED
+  DIET_UPDATED
+  MISSED_SESSION
+  ATTENDANCE_REMINDER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role
+  firstName    String
+  lastName     String
+  phone        String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trainer ProfileTrainer?
+  client  ProfileClient?
+
+  notifications Notification[]
+  auditLogs     AuditLog[] @relation("AuditActor")
+
+  passwordResetTokens PasswordResetToken[]
+}
+
+model ProfileTrainer {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio            String?
+  specialization String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  clients           ProfileClient[]
+  attendanceRecords AttendanceRecord[]
+}
+
+model ProfileClient {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trainerId       String
+  trainer         ProfileTrainer @relation(fields: [trainerId], references: [id])
+
+  age               Int?
+  gender            Gender?
+  emergencyContact  String?
+  emergencyPhone    String?
+  goal              String?
+  medicalNotes      String?
+
+  membershipStart   DateTime?
+  membershipEnd     DateTime?
+  totalSessions     Int       @default(0)
+  sessionsCompleted Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attendanceRecords AttendanceRecord[]
+  workoutWeeks      WorkoutWeek[]
+  dietWeeks         DietWeek[]
+  measurements      Measurement[]
+  progressEntries   ProgressEntry[]
+  progressPhotos    ProgressPhoto[]
+  generatedReports  GeneratedReport[]
+}
+
+model AttendanceRecord {
+  id            String    @id @default(uuid())
+  clientId      String
+  trainerId     String
+  client        ProfileClient   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  trainer       ProfileTrainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  sessionDate   DateTime  @db.Date
+  pinHash       String
+  verifyToken   String    @unique
+
+  startedAt     DateTime  @default(now())
+  expiresAt     DateTime
+
+  trainerStatus TrainerAttendanceStatus @default(PRESENT)
+  clientStatus  ClientAttendanceStatus  @default(PENDING)
+
+  trainerCheckedAt DateTime?
+  clientVerifiedAt DateTime?
+
+  sessionCompleted Boolean @default(false)
+  notes             String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, sessionDate])
+  @@index([trainerId, sessionDate])
+}
+
+model WorkoutWeek {
+  id         String   @id @default(uuid())
+  clientId   String
+  client     ProfileClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  weekNumber Int
+
+  createdById String
+  updatedById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  days WorkoutDay[]
+
+  @@unique([clientId, weekNumber])
+}
+
+model WorkoutDay {
+  id        String      @id @default(uuid())
+  weekId    String
+  week      WorkoutWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  label     String
+  sortOrder Int         @default(0)
+
+  exercises ExerciseRow[]
+}
+
+model ExerciseRow {
+  id        String     @id @default(uuid())
+  dayId     String
+  day       WorkoutDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  name      String
+  sets      Int?
+  reps      String?
+  weight    String?
+  restSec   Int?
+  tempo     String?
+  notes     String?
+  sortOrder Int        @default(0)
+}
+
+model DietWeek {
+  id         String   @id @default(uuid())
+  clientId   String
+  client     ProfileClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  weekNumber Int
+
+  createdById String
+  updatedById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  days DietDay[]
+
+  @@unique([clientId, weekNumber])
+}
+
+model DietDay {
+  id        String   @id @default(uuid())
+  weekId    String
+  week      DietWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  label     String
+  sortOrder Int      @default(0)
+
+  meals MealRow[]
+}
+
+model MealRow {
+  id        String   @id @default(uuid())
+  dayId     String
+  day       DietDay  @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  slotLabel String   @default("Meal")
+  foodName  String
+  quantity  String?
+  calories  Float    @default(0)
+  protein   Float    @default(0)
+  carbs     Float    @default(0)
+  fat       Float    @default(0)
+  sortOrder Int      @default(0)
+}
+
+model Measurement {
+  id         String   @id @default(uuid())
+  clientId   String
+  client     ProfileClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  recordedAt DateTime @default(now())
+
+  weight    Float?
+  height    Float?
+  chest     Float?
+  waist     Float?
+  hips      Float?
+  biceps    Float?
+  forearms  Float?
+  thigh     Float?
+  calves    Float?
+  bodyFat   Float?
+  bmi       Float?
+
+  recordedById String?
+}
+
+model ProgressEntry {
+  id               String   @id @default(uuid())
+  clientId         String
+  client           ProfileClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  weekNumber       Int?
+  weekStartDate    DateTime?
+
+  trainerComments   String?
+  recovery          String?
+  energyLevel       String?
+  performanceNotes  String?
+
+  strengthNotes String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ProgressPhoto {
+  id           String           @id @default(uuid())
+  clientId     String
+  client       ProfileClient    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type         ProgressPhotoType
+  weekNumber   Int?
+  url          String
+  publicId     String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+}
+
+model GeneratedReport {
+  id            String   @id @default(uuid())
+  clientId      String
+  client        ProfileClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  url           String
+  generatedById String
+  createdAt     DateTime @default(now())
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String
+  actor     User     @relation("AuditActor", fields: [actorId], references: [id])
+  entity    String
+  entityId  String
+  action    String
+  oldValue  Json?
+  newValue  Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
