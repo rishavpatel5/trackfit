@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { useCachedGet } from "@/hooks/use-cached-get";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,15 +13,8 @@ type Row = {
 };
 
 export default function TrainerClientsPage() {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .get<{ data: Row[] }>("/clients?pageSize=100")
-      .then((res) => setRows(res.data.data))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, loading } = useCachedGet<{ data: Row[] }>("/clients?pageSize=100", 60_000);
+  const rows = data?.data ?? [];
 
   return (
     <div className="space-y-6">

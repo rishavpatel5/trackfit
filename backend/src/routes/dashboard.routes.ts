@@ -4,6 +4,7 @@ import { authMiddleware, requireRoles, type AuthedRequest } from "../middleware/
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../lib/prisma.js";
 import { getClientProfileId, requireUserProfile } from "./helpers.js";
+import { closePastDaySessions, syncSessionsCompleted } from "../services/attendance-session.service.js";
 
 export function dashboardRouter(env: Env) {
   const r = Router();
@@ -106,11 +107,14 @@ export function dashboardRouter(env: Env) {
     requireRoles("CLIENT"),
     asyncHandler(async (req: AuthedRequest, res) => {
       await getClientProfileId(req.user!.id);
+      await closePastDaySessions();
       const client = await prisma.profileClient.findUnique({
         where: { userId: req.user!.id },
         include: { user: true, trainer: { include: { user: true } } },
       });
       if (!client) return res.status(404).json({ error: "Client not found" });
+
+      client.sessionsCompleted = await syncSessionsCompleted(client.id);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -128,7 +132,7 @@ export function dashboardRouter(env: Env) {
           expiresAt: { gt: new Date() },
         },
         orderBy: { startedAt: "desc" },
-        select: { id: true, verifyToken: true, expiresAt: true, sessionDate: true },
+        select: { id: true, expiresAt: true, sessionDate: true },
       });
 
       const daysLeft = client.membershipEnd

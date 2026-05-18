@@ -27,5 +27,14 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .table-scroll {
+    @apply -mx-1 overflow-x-auto overscroll-x-contain;
+  }
+
+  .table-scroll table {
+    @apply min-w-[36rem];
   }
 }

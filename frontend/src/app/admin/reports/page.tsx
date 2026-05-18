@@ -1,20 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ReportPdfViewer } from "@/components/clients/report-pdf-viewer";
 
 type ClientMini = {
   id: string;
   user: { firstName: string; lastName: string };
 };
 
+type ReportMeta = {
+  token: string;
+  publicPath: string;
+};
+
+const apiBase = () => process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
 export default function AdminReportsPage() {
   const [clients, setClients] = useState<ClientMini[]>([]);
   const [selected, setSelected] = useState("");
+  const [meta, setMeta] = useState<ReportMeta | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,16 +38,32 @@ export default function AdminReportsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function generate() {
+  useEffect(() => {
     if (!selected) return;
+    api
+      .get<ReportMeta>(`/reports/clients/${selected}`)
+      .then((res) => setMeta(res.data))
+      .catch(() => {
+        setMeta(null);
+        toast.error("Unable to load report link");
+      });
+  }, [selected]);
+
+  const urls = useMemo(() => {
+    if (!meta) return null;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const publicUrl = `${origin}${meta.publicPath}`;
+    const viewUrl = `${apiBase()}/reports/public/${meta.token}`;
+    return { publicUrl, viewUrl, downloadUrl: `${viewUrl}?download=1` };
+  }, [meta]);
+
+  async function copyLink() {
+    if (!urls) return;
     try {
-      const res = await api.post(`/reports/clients/${selected}/pdf`, {}, { responseType: "blob" });
-      const url = URL.createObjectURL(res.data);
-      window.open(url, "_blank");
-      toast.success("PDF opened in a new tab");
-      setTimeout(() => URL.revokeObjectURL(url), 120_000);
+      await navigator.clipboard.writeText(urls.publicUrl);
+      toast.success("Report link copied");
     } catch {
-      toast.error("Unable to generate PDF — ensure the API is reachable.");
+      toast.error("Could not copy link");
     }
   }
 
@@ -46,12 +72,12 @@ export default function AdminReportsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Reports</h1>
         <p className="text-sm text-muted-foreground">
-          Puppeteer renders on the API and streams the PDF to your browser — nothing is stored on disk or in the database.
+          Each client has one permanent dossier link. Opening or downloading always uses the latest data — no stored PDF files.
         </p>
       </div>
       <Card className="border-border/70">
         <CardHeader>
-          <CardTitle>Generate transformation dossier</CardTitle>
+          <CardTitle>Client transformation dossier</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {loading ? (
@@ -69,7 +95,31 @@ export default function AdminReportsPage() {
                   </option>
                 ))}
               </select>
-              <Button onClick={generate}>Generate PDF</Button>
+              {urls ? (
+                <>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input readOnly value={urls.publicUrl} className="font-mono text-xs" />
+                    <Button type="button" variant="secondary" onClick={copyLink}>
+                      Copy link
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" asChild>
+                      <a href={urls.publicUrl} target="_blank" rel="noreferrer">
+                        Open dossier page
+                      </a>
+                    </Button>
+                    <Button asChild>
+                      <a href={urls.downloadUrl} target="_blank" rel="noreferrer">
+                        Download PDF
+                      </a>
+                    </Button>
+                  </div>
+                  <ReportPdfViewer viewUrl={urls.viewUrl} heightClassName="h-[min(60vh,640px)]" />
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Select a client to load their dossier link.</p>
+              )}
             </>
           )}
         </CardContent>

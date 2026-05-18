@@ -15,10 +15,10 @@ const variants = cva(
         secondary: "bg-muted text-foreground hover:bg-muted/80",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 px-3 rounded-md",
-        lg: "h-11 px-8 rounded-md",
-        icon: "h-10 w-10",
+        default: "h-11 min-h-11 px-4 py-2 touch-manipulation",
+        sm: "h-10 min-h-10 px-3 rounded-md touch-manipulation",
+        lg: "h-12 min-h-12 px-8 rounded-md touch-manipulation",
+        icon: "h-11 w-11 min-h-11 min-w-11 touch-manipulation",
       },
     },
     defaultVariants: {

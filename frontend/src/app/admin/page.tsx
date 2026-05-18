@@ -1,19 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
-import { api } from "@/lib/api";
+import dynamic from "next/dynamic";
+import { useCachedGet } from "@/hooks/use-cached-get";
 import { StatCards } from "@/components/dashboard/stat-cards";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const AdminDashboardChart = dynamic(
+  () => import("@/components/dashboard/admin-dashboard-chart").then((m) => m.AdminDashboardChart),
+  { ssr: false, loading: () => <Skeleton className="h-full w-full" /> },
+);
 
 type Stats = {
   totalTrainers: number;
@@ -25,13 +21,9 @@ type Stats = {
 };
 
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const { data: stats, loading } = useCachedGet<Stats>("/dashboard/admin", 60_000);
 
-  useEffect(() => {
-    api.get<Stats>("/dashboard/admin").then((res) => setStats(res.data)).catch(() => setStats(null));
-  }, []);
-
-  if (!stats) {
+  if (loading || !stats) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-10 w-64" />
@@ -49,7 +41,7 @@ export default function AdminDashboardPage() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fade-up">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Command overview</h1>
         <p className="text-sm text-muted-foreground">Enterprise-grade telemetry across trainers, clients, and accountability.</p>
@@ -74,23 +66,8 @@ export default function AdminDashboardPage() {
         <CardHeader>
           <CardTitle>Operational pulse</CardTitle>
         </CardHeader>
-        <CardContent className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <Tooltip
-                cursor={{ fill: "hsl(var(--muted))", opacity: 0.15 }}
-                contentStyle={{
-                  background: "hsl(var(--card))",
-                  borderRadius: 12,
-                  border: "1px solid hsl(var(--border))",
-                }}
-              />
-              <Bar dataKey="value" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <CardContent className="h-56 sm:h-72">
+          <AdminDashboardChart chartData={chartData} />
         </CardContent>
       </Card>
     </div>

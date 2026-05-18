@@ -1,52 +1,109 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ReportPdfViewer } from "@/components/clients/report-pdf-viewer";
+
+type ReportMeta = {
+  token: string;
+  publicPath: string;
+  live: boolean;
+  description: string;
+};
+
+const apiBase = () => process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export function ReportsTabToolbar({ clientId, canEdit }: { clientId: string; canEdit: boolean }) {
-  const [items, setItems] = useState<{ id: string; url: string; createdAt: string }[]>([]);
+  const [meta, setMeta] = useState<ReportMeta | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api.get<typeof items>(`/reports/clients/${clientId}`).then((res) => setItems(res.data));
+  const urls = useMemo(() => {
+    if (!meta) return null;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const publicUrl = `${origin}${meta.publicPath}`;
+    const viewUrl = `${apiBase()}/reports/public/${meta.token}`;
+    const downloadUrl = `${viewUrl}?download=1`;
+    return { publicUrl, viewUrl, downloadUrl };
+  }, [meta]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get<ReportMeta>(`/reports/clients/${clientId}`);
+      setMeta(data);
+    } catch {
+      toast.error("Unable to load report link");
+    } finally {
+      setLoading(false);
+    }
   }, [clientId]);
 
-  async function gen() {
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function copyLink() {
+    if (!urls) return;
     try {
-      const { data } = await api.post<{ url: string }>(`/reports/clients/${clientId}/pdf`);
-      toast.success("Report ready");
-      window.open(data.url, "_blank");
-      const list = await api.get<typeof items>(`/reports/clients/${clientId}`);
-      setItems(list.data);
+      await navigator.clipboard.writeText(urls.publicUrl);
+      toast.success("Report link copied");
     } catch {
-      toast.error("PDF host not configured");
+      toast.error("Could not copy link");
     }
   }
 
   return (
     <Card className="border-border/70">
       <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <CardTitle>Professional PDF exports</CardTitle>
-        {canEdit ? (
-          <Button variant="outline" onClick={gen}>
-            Generate new dossier
-          </Button>
-        ) : null}
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        {items.length === 0 ? <p className="text-muted-foreground">No exports yet.</p> : null}
-        {items.map((r) => (
-          <div key={r.id} className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-3 py-2">
-            <span>{new Date(r.createdAt).toLocaleString()}</span>
-            <Button size="sm" variant="ghost" asChild>
-              <a href={r.url} target="_blank" rel="noreferrer">
-                Download
+        <div>
+          <CardTitle>Live transformation dossier</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            One permanent link per client. Each view rebuilds the PDF with the latest attendance, plans, and progress.
+          </p>
+        </div>
+        {urls ? (
+          <div className="flex flex-wrap gap-2">
+            {canEdit ? (
+              <Button variant="outline" onClick={copyLink}>
+                Copy link
+              </Button>
+            ) : null}
+            <Button variant="outline" asChild>
+              <a href={urls.publicUrl} target="_blank" rel="noreferrer">
+                Open full page
+              </a>
+            </Button>
+            <Button asChild>
+              <a href={urls.downloadUrl} target="_blank" rel="noreferrer">
+                Download PDF
               </a>
             </Button>
           </div>
-        ))}
+        ) : null}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading report…</p>
+        ) : !meta || !urls ? (
+          <p className="text-sm text-muted-foreground">Report unavailable.</p>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input readOnly value={urls.publicUrl} className="font-mono text-xs" />
+              {canEdit ? (
+                <Button type="button" variant="secondary" onClick={copyLink} className="shrink-0">
+                  Copy
+                </Button>
+              ) : null}
+            </div>
+            <p className="text-xs text-muted-foreground">{meta.description}</p>
+            <ReportPdfViewer viewUrl={urls.viewUrl} />
+          </>
+        )}
       </CardContent>
     </Card>
   );

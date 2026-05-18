@@ -7,9 +7,15 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:generate": "npm run db:generate --prefix ../backend",
+    "db:push": "npm run db:push --prefix ../backend",
+    "db:migrate": "npm run db:migrate --prefix ../backend",
+    "db:deploy": "npm run db:deploy --prefix ../backend",
+    "db:seed": "npm run db:seed --prefix ../backend"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

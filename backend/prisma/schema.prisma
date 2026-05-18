@@ -5,8 +5,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations / db push must use direct Postgres (Supabase port 5432), not the pooler (6543).
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -100,6 +102,8 @@ model ProfileClient {
   membershipEnd     DateTime?
   totalSessions     Int       @default(0)
   sessionsCompleted Int       @default(0)
+  /// Stable token for the single live PDF dossier link (regenerated on each view).
+  reportToken       String?   @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -134,11 +138,14 @@ model AttendanceRecord {
   clientVerifiedAt DateTime?
 
   sessionCompleted Boolean @default(false)
+  /** Counts against the client's package (present together, or client no-show). */
+  sessionCharged   Boolean @default(false)
   notes             String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([clientId, sessionDate])
   @@index([clientId, sessionDate])
   @@index([trainerId, sessionDate])
 }

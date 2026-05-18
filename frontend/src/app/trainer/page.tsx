@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { useCachedGet } from "@/hooks/use-cached-get";
+import { formatDateIST } from "@/lib/datetime";
 import { StatCards } from "@/components/dashboard/stat-cards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,13 +20,9 @@ type Dashboard = {
 };
 
 export default function TrainerDashboardPage() {
-  const [data, setData] = useState<Dashboard | null>(null);
+  const { data, loading } = useCachedGet<Dashboard>("/dashboard/trainer", 60_000);
 
-  useEffect(() => {
-    api.get<Dashboard>("/dashboard/trainer").then((res) => setData(res.data));
-  }, []);
-
-  if (!data) {
+  if (loading || !data) {
     return <Skeleton className="h-64 w-full" />;
   }
 
@@ -55,8 +51,11 @@ export default function TrainerDashboardPage() {
               <div>
                 {m.client.user.firstName} {m.client.user.lastName}
               </div>
-              <div className="text-muted-foreground">
-                {m.weight ? `${m.weight} kg` : "—"} · BF {m.bodyFat ?? "—"}%
+              <div className="text-right text-muted-foreground">
+                <div>{formatDateIST(m.recordedAt)}</div>
+                <div className="text-xs">
+                  {m.weight ? `${m.weight} kg` : "—"} · BF {m.bodyFat ?? "—"}%
+                </div>
               </div>
             </div>
           ))}

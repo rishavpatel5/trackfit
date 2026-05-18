@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clearApiCache } from "@/lib/api-cache";
 import { useAuthStore } from "@/store/auth-store";
 
 export const api = axios.create({
@@ -14,7 +15,13 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const method = res.config.method?.toUpperCase();
+    if (method && method !== "GET" && method !== "HEAD") {
+      clearApiCache();
+    }
+    return res;
+  },
   (err) => {
     if (err.response?.status === 401) {
       // Avoid clearing persisted auth before zustand rehydrates (would look like "logout on refresh").
