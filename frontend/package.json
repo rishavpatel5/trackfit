@@ -6,8 +6,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "next dev",
-    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next dev",
+    "dev": "node ./scripts/ensure-dev.mjs && next dev",
+    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true,maxRetries:5,retryDelay:300})\" && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

@@ -15,6 +15,7 @@ declare const schema: z.ZodObject<{
     CLOUDINARY_API_SECRET: z.ZodOptional<z.ZodString>;
     BCRYPT_ROUNDS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     ATTENDANCE_PIN_EXPIRY_MINUTES: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
+    GYM_TIMEZONE: z.ZodDefault<z.ZodString>;
     RATE_LIMIT_WINDOW_MS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     RATE_LIMIT_MAX: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     RETURN_RESET_TOKEN: z.ZodOptional<z.ZodCoercedBoolean<unknown>>;

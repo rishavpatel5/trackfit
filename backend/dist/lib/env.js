@@ -11,6 +11,8 @@ const schema = z.object({
     CLOUDINARY_API_SECRET: z.string().optional(),
     BCRYPT_ROUNDS: z.coerce.number().default(12),
     ATTENDANCE_PIN_EXPIRY_MINUTES: z.coerce.number().default(20),
+    /** IANA timezone for session calendar days (e.g. Asia/Kolkata). */
+    GYM_TIMEZONE: z.string().default("Asia/Kolkata"),
     RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
     RATE_LIMIT_MAX: z.coerce.number().default(300),
     RETURN_RESET_TOKEN: z.coerce.boolean().optional(),

@@ -3,6 +3,7 @@ import { authMiddleware, requireRoles } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../lib/prisma.js";
 import { getClientProfileId, requireUserProfile } from "./helpers.js";
+import { closePastDaySessions, syncSessionsCompleted } from "../services/attendance-session.service.js";
 export function dashboardRouter(env) {
     const r = Router();
     r.use(authMiddleware(env));
@@ -78,12 +79,14 @@ export function dashboardRouter(env) {
     }));
     r.get("/client", requireRoles("CLIENT"), asyncHandler(async (req, res) => {
         await getClientProfileId(req.user.id);
+        await closePastDaySessions();
         const client = await prisma.profileClient.findUnique({
             where: { userId: req.user.id },
             include: { user: true, trainer: { include: { user: true } } },
         });
         if (!client)
             return res.status(404).json({ error: "Client not found" });
+        client.sessionsCompleted = await syncSessionsCompleted(client.id);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const attendance = await prisma.attendanceRecord.findMany({
@@ -98,7 +101,7 @@ export function dashboardRouter(env) {
                 expiresAt: { gt: new Date() },
             },
             orderBy: { startedAt: "desc" },
-            select: { id: true, verifyToken: true, expiresAt: true, sessionDate: true },
+            select: { id: true, expiresAt: true, sessionDate: true },
         });
         const daysLeft = client.membershipEnd
             ? Math.ceil((client.membershipEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24))

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
@@ -9,6 +10,9 @@ import { getTrainerProfileId, parsePagination, sendList, } from "./helpers.js";
 import { writeAudit } from "../services/audit.service.js";
 import { paramId } from "./params.js";
 import { notifyUser } from "../services/notification.service.js";
+import { syncSessionsCompleted } from "../services/attendance-session.service.js";
+import { membershipEndAfterRenew, membershipEndFromStartAndSessions } from "../services/membership.service.js";
+import { formatDateIST } from "../lib/datetime-format.js";
 async function assertClientAccess(req, clientId) {
     const role = req.user.role;
     if (role === "ADMIN")
@@ -81,9 +85,8 @@ export function clientsRouter(env) {
         emergencyPhone: z.string().optional(),
         goal: z.string().optional(),
         medicalNotes: z.string().optional(),
-        membershipStart: z.coerce.date().optional(),
-        membershipEnd: z.coerce.date().optional(),
-        totalSessions: z.number().int().nonnegative().optional(),
+        membershipStart: z.coerce.date(),
+        totalSessions: z.number().int().positive(),
         sessionsCompleted: z.number().int().nonnegative().optional(),
     });
     r.post("/", adminOnly, asyncHandler(async (req, res) => {
@@ -95,6 +98,8 @@ export function clientsRouter(env) {
         if (exists)
             throw new AppError(409, "Email already registered");
         const passwordHash = await hashPassword(body.password, env.BCRYPT_ROUNDS);
+        const membershipStart = body.membershipStart;
+        const membershipEnd = membershipEndFromStartAndSessions(membershipStart, body.totalSessions);
         const client = await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
@@ -116,10 +121,11 @@ export function clientsRouter(env) {
                     emergencyPhone: body.emergencyPhone,
                     goal: body.goal,
                     medicalNotes: body.medicalNotes,
-                    membershipStart: body.membershipStart,
-                    membershipEnd: body.membershipEnd,
-                    totalSessions: body.totalSessions ?? 0,
+                    membershipStart,
+                    membershipEnd,
+                    totalSessions: body.totalSessions,
                     sessionsCompleted: body.sessionsCompleted ?? 0,
+                    reportToken: randomUUID(),
                 },
                 include: { user: true, trainer: { include: { user: true } } },
             });
@@ -151,6 +157,7 @@ export function clientsRouter(env) {
         });
         if (!client)
             throw new AppError(404, "Client not found");
+        client.sessionsCompleted = await syncSessionsCompleted(client.id);
         res.json(client);
     }));
     const updateSchema = z.object({
@@ -230,21 +237,19 @@ export function clientsRouter(env) {
     }));
     r.post("/:id/extend-membership", adminOnly, asyncHandler(async (req, res) => {
         const schema = z.object({
-            days: z.number().int().positive(),
-            addSessions: z.number().int().nonnegative().optional(),
+            addSessions: z.number().int().positive(),
         });
         const body = schema.parse(req.body);
         const client = await prisma.profileClient.findUnique({ where: { id: paramId(req.params, "id") } });
         if (!client)
             throw new AppError(404, "Client not found");
-        const base = client.membershipEnd && client.membershipEnd > new Date() ? client.membershipEnd : new Date();
-        const end = new Date(base);
-        end.setDate(end.getDate() + body.days);
+        const membershipEnd = membershipEndAfterRenew(client.membershipEnd, body.addSessions);
+        const totalSessions = client.totalSessions + body.addSessions;
         const updated = await prisma.profileClient.update({
             where: { id: client.id },
             data: {
-                membershipEnd: end,
-                totalSessions: body.addSessions ? client.totalSessions + body.addSessions : undefined,
+                membershipEnd,
+                totalSessions,
             },
             include: { user: true },
         });
@@ -260,7 +265,7 @@ export function clientsRouter(env) {
             userId: client.userId,
             type: "MEMBERSHIP_EXPIRING",
             title: "Membership extended",
-            body: `Your membership end date is now ${end.toISOString().slice(0, 10)}.`,
+            body: `Your package now has ${totalSessions} sessions through ${formatDateIST(membershipEnd)}.`,
         });
         res.json(updated);
     }));

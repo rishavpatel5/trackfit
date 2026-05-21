@@ -2,50 +2,48 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { AppError } from "../lib/AppError.js";
+import { ensureClientReportToken, resolveClientIdByReportToken, streamClientReportPdf, } from "../services/report.service.js";
 import { assertClientAccessInline } from "./access.js";
-import { buildClientReportHtml, renderPdfFromHtml } from "../services/pdf.service.js";
-import { configureCloudinary, uploadBuffer } from "../lib/cloudinary.js";
-import { writeAudit } from "../services/audit.service.js";
 import { paramId } from "./params.js";
 export function reportsRouter(env) {
     const r = Router();
-    r.use(authMiddleware(env));
-    r.post("/clients/:clientId/pdf", asyncHandler(async (req, res) => {
-        if (req.user.role === "CLIENT")
-            throw new AppError(403, "Forbidden");
-        const clientId = paramId(req.params, "clientId");
-        await assertClientAccessInline(req, clientId);
-        const html = await buildClientReportHtml(prisma, clientId);
-        const pdfBuffer = Buffer.from(await renderPdfFromHtml(html));
-        if (!configureCloudinary(env)) {
-            throw new AppError(503, "Configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET to generate hosted PDF reports.");
-        }
-        const uploaded = await uploadBuffer(pdfBuffer, "gvtrainer/reports");
-        const url = uploaded.secure_url;
-        const row = await prisma.generatedReport.create({
-            data: {
-                clientId,
-                url,
-                generatedById: req.user.id,
-            },
+    r.get("/public/:token", asyncHandler(async (req, res) => {
+        const token = String(req.params.token ?? "");
+        const client = await resolveClientIdByReportToken(token);
+        const download = req.query.download === "1" || req.query.download === "true";
+        await streamClientReportPdf(client.id, res, {
+            download,
+            firstName: client.user.firstName,
+            lastName: client.user.lastName,
         });
-        await writeAudit({
-            actorId: req.user.id,
-            entity: "GeneratedReport",
-            entityId: row.id,
-            action: "GENERATE_PDF",
-        });
-        res.status(201).json(row);
     }));
+    r.use(authMiddleware(env));
     r.get("/clients/:clientId", asyncHandler(async (req, res) => {
         const clientId = paramId(req.params, "clientId");
         await assertClientAccessInline(req, clientId);
-        const rows = await prisma.generatedReport.findMany({
-            where: { clientId },
-            orderBy: { createdAt: "desc" },
+        const token = await ensureClientReportToken(clientId);
+        res.json({
+            token,
+            publicPath: `/report/${token}`,
+            live: true,
+            description: "PDF is generated on each view with the latest client data.",
         });
-        res.json(rows);
+    }));
+    r.get("/clients/:clientId/pdf", asyncHandler(async (req, res) => {
+        const clientId = paramId(req.params, "clientId");
+        await assertClientAccessInline(req, clientId);
+        const download = req.query.download === "1" || req.query.download === "true";
+        const profile = await prisma.profileClient.findUnique({
+            where: { id: clientId },
+            select: { user: { select: { firstName: true, lastName: true } } },
+        });
+        if (!profile)
+            throw new Error("Client not found");
+        await streamClientReportPdf(clientId, res, {
+            download,
+            firstName: profile.user.firstName,
+            lastName: profile.user.lastName,
+        });
     }));
     return r;
 }

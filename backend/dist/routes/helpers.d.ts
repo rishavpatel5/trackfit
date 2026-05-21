@@ -17,6 +17,7 @@ export declare function requireUserProfile(req: AuthedRequest): Promise<{
         membershipEnd: Date | null;
         totalSessions: number;
         sessionsCompleted: number;
+        reportToken: string | null;
     } | null;
     trainer: {
         id: string;
