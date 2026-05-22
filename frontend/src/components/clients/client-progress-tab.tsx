@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Image from "next/image";
 import { api } from "@/lib/api";
+import { cachedApiGet } from "@/lib/api-cache";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
+import { formatDateIST, formatDateTimeIST, parseApiDate } from "@/lib/datetime";
 
 export type MeasurementRow = {
   id: string;
@@ -63,21 +65,20 @@ function latestOfType(photos: ProgressPhoto[], t: ProgressPhoto["type"]) {
 }
 
 function weekLabelMonday(dateIso: string) {
-  const d = new Date(dateIso);
-  const day = d.getDay();
+  const d = parseApiDate(dateIso);
+  const day = d.getUTCDay();
   const diffToMon = day === 0 ? -6 : 1 - day;
   const mon = new Date(d);
-  mon.setDate(d.getDate() + diffToMon);
-  return mon.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  mon.setUTCDate(d.getUTCDate() + diffToMon);
+  return formatDateIST(mon);
 }
 
 function groupingKeyMonday(dateIso: string) {
-  const d = new Date(dateIso);
-  const day = d.getDay();
+  const d = parseApiDate(dateIso);
+  const day = d.getUTCDay();
   const diffToMon = day === 0 ? -6 : 1 - day;
   const mon = new Date(d);
-  mon.setHours(0, 0, 0, 0);
-  mon.setDate(d.getDate() + diffToMon);
+  mon.setUTCDate(d.getUTCDate() + diffToMon);
   return mon.toISOString().slice(0, 10);
 }
 
@@ -102,14 +103,14 @@ export function ClientProgressTab({ clientId, canEdit }: { clientId: string; can
 
   useEffect(() => {
     Promise.all([
-      api.get<{ data: MeasurementRow[] }>(`/measurements/clients/${clientId}?pageSize=200`),
-      api.get<ProgressPhoto[]>(`/progress/clients/${clientId}/photos`),
-      api.get<{ data: ProgressEntry[] }>(`/progress/clients/${clientId}/entries?pageSize=100`),
+      cachedApiGet<{ data: MeasurementRow[] }>(`/measurements/clients/${clientId}?pageSize=200`, 30_000),
+      cachedApiGet<ProgressPhoto[]>(`/progress/clients/${clientId}/photos`, 30_000),
+      cachedApiGet<{ data: ProgressEntry[] }>(`/progress/clients/${clientId}/entries?pageSize=100`, 30_000),
     ])
-      .then(([mRes, pRes, eRes]) => {
-        setMeasurements(mRes.data.data);
-        setPhotos(pRes.data);
-        setEntries(eRes.data.data);
+      .then(([measurementsRes, photosRes, entriesRes]) => {
+        setMeasurements(measurementsRes.data);
+        setPhotos(photosRes);
+        setEntries(entriesRes.data);
       })
       .catch(() => toast.error("Unable to load progress data"));
   }, [clientId, tick]);
@@ -152,7 +153,7 @@ export function ClientProgressTab({ clientId, canEdit }: { clientId: string; can
   const chartData = [...sortedMeasurements]
     .filter((m) => m.weight != null && m.weight > 0)
     .map((m) => ({
-      label: new Date(m.recordedAt).toLocaleDateString(),
+      label: formatDateIST(m.recordedAt),
       weight: m.weight ?? 0,
     }));
 
@@ -198,7 +199,7 @@ export function ClientProgressTab({ clientId, canEdit }: { clientId: string; can
             <CardTitle>Baseline assessment</CardTitle>
             <CardDescription>
               Captures collected on onboarding day — anchors every downstream comparison.&nbsp;
-              {baseline ? <Badge variant="success">{new Date(baseline.recordedAt).toLocaleDateString()}</Badge> : null}
+              {baseline ? <Badge variant="success">{formatDateIST(baseline.recordedAt)}</Badge> : null}
             </CardDescription>
           </div>
           {canEdit ? <LogMeasurementDialog clientId={clientId} onLogged={refresh} /> : null}
@@ -254,7 +255,7 @@ export function ClientProgressTab({ clientId, canEdit }: { clientId: string; can
                     {grp.measurements.map((m) => (
                       <div key={m.id} className="mb-6 rounded-lg border border-border bg-card p-4 last:mb-0">
                         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Checkpoint · {new Date(m.recordedAt).toLocaleString()}
+                          Checkpoint · {formatDateTimeIST(m.recordedAt)}
                         </p>
                         <MeasurementGridView data={m} dense />
                       </div>
@@ -407,7 +408,7 @@ function PhotoHero({
       <p className="text-center text-xs uppercase tracking-[0.3em] text-muted-foreground">{title}</p>
       <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-border bg-muted/50">
         {url ? (
-          <Image src={url} alt={title} fill className="object-cover" sizes="(max-width:768px) 100vw, 50vw" unoptimized />
+          <Image src={url} alt={title} fill className="object-cover" sizes="(max-width:768px) 100vw, 50vw" />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">{emptyText}</div>
         )}
@@ -420,7 +421,7 @@ function PhotoHero({
 function WeeklyThumb({ url, label }: { url: string; label: string }) {
   return (
     <div className="relative h-44 w-32 overflow-hidden rounded-xl border border-border">
-      <Image src={url} alt={label} fill className="object-cover" sizes="128px" unoptimized />
+      <Image src={url} alt={label} fill className="object-cover" sizes="128px" />
       <span className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5 text-[10px] text-white">{label}</span>
     </div>
   );

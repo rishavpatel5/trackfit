@@ -62,6 +62,7 @@ CREATE TABLE "public"."ProfileClient" (
     "membershipEnd" TIMESTAMP(3),
     "totalSessions" INTEGER NOT NULL DEFAULT 0,
     "sessionsCompleted" INTEGER NOT NULL DEFAULT 0,
+    "reportToken" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -83,6 +84,7 @@ CREATE TABLE "public"."AttendanceRecord" (
     "trainerCheckedAt" TIMESTAMP(3),
     "clientVerifiedAt" TIMESTAMP(3),
     "sessionCompleted" BOOLEAN NOT NULL DEFAULT false,
+    "sessionCharged" BOOLEAN NOT NULL DEFAULT false,
     "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -281,7 +283,7 @@ CREATE UNIQUE INDEX "ProfileTrainer_userId_key" ON "public"."ProfileTrainer"("us
 CREATE UNIQUE INDEX "ProfileClient_userId_key" ON "public"."ProfileClient"("userId");
 
 -- CreateIndex
-CREATE INDEX "ProfileClient_trainerId_idx" ON "public"."ProfileClient"("trainerId");
+CREATE UNIQUE INDEX "ProfileClient_reportToken_key" ON "public"."ProfileClient"("reportToken");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "AttendanceRecord_verifyToken_key" ON "public"."AttendanceRecord"("verifyToken");
@@ -293,31 +295,13 @@ CREATE INDEX "AttendanceRecord_clientId_sessionDate_idx" ON "public"."Attendance
 CREATE INDEX "AttendanceRecord_trainerId_sessionDate_idx" ON "public"."AttendanceRecord"("trainerId", "sessionDate");
 
 -- CreateIndex
-CREATE INDEX "AttendanceRecord_sessionDate_idx" ON "public"."AttendanceRecord"("sessionDate");
-
--- CreateIndex
-CREATE INDEX "WorkoutWeek_clientId_idx" ON "public"."WorkoutWeek"("clientId");
+CREATE UNIQUE INDEX "AttendanceRecord_clientId_sessionDate_key" ON "public"."AttendanceRecord"("clientId", "sessionDate");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "WorkoutWeek_clientId_weekNumber_key" ON "public"."WorkoutWeek"("clientId", "weekNumber");
 
 -- CreateIndex
-CREATE INDEX "DietWeek_clientId_idx" ON "public"."DietWeek"("clientId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "DietWeek_clientId_weekNumber_key" ON "public"."DietWeek"("clientId", "weekNumber");
-
--- CreateIndex
-CREATE INDEX "Measurement_clientId_recordedAt_idx" ON "public"."Measurement"("clientId", "recordedAt");
-
--- CreateIndex
-CREATE INDEX "ProgressEntry_clientId_idx" ON "public"."ProgressEntry"("clientId");
-
--- CreateIndex
-CREATE INDEX "ProgressPhoto_clientId_idx" ON "public"."ProgressPhoto"("clientId");
-
--- CreateIndex
-CREATE INDEX "GeneratedReport_clientId_idx" ON "public"."GeneratedReport"("clientId");
 
 -- CreateIndex
 CREATE INDEX "Notification_userId_read_idx" ON "public"."Notification"("userId", "read");
@@ -381,4 +365,3 @@ ALTER TABLE "public"."AuditLog" ADD CONSTRAINT "AuditLog_actorId_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "public"."PasswordResetToken" ADD CONSTRAINT "PasswordResetToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

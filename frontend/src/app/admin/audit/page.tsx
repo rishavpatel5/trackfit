@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { cachedApiGet } from "@/lib/api-cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatDateTimeIST } from "@/lib/datetime";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type Row = {
@@ -21,9 +22,8 @@ export default function AdminAuditPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<{ data: Row[] }>("/audit?pageSize=80")
-      .then((res) => setRows(res.data.data))
+    cachedApiGet<{ data: Row[] }>("/audit?pageSize=80", 30_000)
+      .then((res) => setRows(res.data))
       .catch(() => toast.error("Unable to load audit logs"))
       .finally(() => setLoading(false));
   }, []);
@@ -42,6 +42,7 @@ export default function AdminAuditPage() {
           {loading ? (
             <Skeleton className="h-56 w-full" />
           ) : (
+            <div className="table-scroll">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -54,7 +55,7 @@ export default function AdminAuditPage() {
               <TableBody>
                 {rows.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
+                    <TableCell>{formatDateTimeIST(r.createdAt)}</TableCell>
                     <TableCell>
                       <div>{r.actor.email}</div>
                       <div className="text-xs text-muted-foreground">{r.actor.role}</div>
@@ -67,6 +68,7 @@ export default function AdminAuditPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

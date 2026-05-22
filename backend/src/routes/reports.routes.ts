@@ -3,52 +3,66 @@ import type { Env } from "../lib/env.js";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, type AuthedRequest } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { AppError } from "../lib/AppError.js";
+import {
+  ensureClientReportToken,
+  resolveClientIdByReportToken,
+  streamClientReportPdf,
+} from "../services/report.service.js";
 import { assertClientAccessInline } from "./access.js";
-import { buildClientReportHtml, renderPdfFromHtml } from "../services/pdf.service.js";
-import { writeAudit } from "../services/audit.service.js";
 import { paramId } from "./params.js";
 
 export function reportsRouter(env: Env) {
   const r = Router();
-  r.use(authMiddleware(env));
 
-  r.post(
-    "/clients/:clientId/pdf",
-    asyncHandler(async (req: AuthedRequest, res) => {
-      if (req.user!.role === "CLIENT") throw new AppError(403, "Forbidden");
-      const clientId = paramId(req.params, "clientId");
-      await assertClientAccessInline(req, clientId);
-
-      const html = await buildClientReportHtml(prisma, clientId);
-      const pdfBytes = await renderPdfFromHtml(html);
-
-      await writeAudit({
-        actorId: req.user!.id,
-        entity: "Client",
-        entityId: clientId,
-        action: "GENERATE_PDF",
+  r.get(
+    "/public/:token",
+    asyncHandler(async (req, res) => {
+      const token = String(req.params.token ?? "");
+      const client = await resolveClientIdByReportToken(token);
+      const download = req.query.download === "1" || req.query.download === "true";
+      await streamClientReportPdf(client.id, res, {
+        download,
+        firstName: client.user.firstName,
+        lastName: client.user.lastName,
       });
-
-      const filename = `gvtrainer-report-${clientId.slice(0, 8)}.pdf`;
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-      res.setHeader("Cache-Control", "private, no-store");
-      res.send(Buffer.from(pdfBytes));
     }),
   );
 
-  /** Legacy rows only — new PDF generation streams bytes and does not persist URLs. */
+  r.use(authMiddleware(env));
+
   r.get(
     "/clients/:clientId",
     asyncHandler(async (req: AuthedRequest, res) => {
       const clientId = paramId(req.params, "clientId");
       await assertClientAccessInline(req, clientId);
-      const rows = await prisma.generatedReport.findMany({
-        where: { clientId },
-        orderBy: { createdAt: "desc" },
+      const token = await ensureClientReportToken(clientId);
+      res.json({
+        token,
+        publicPath: `/report/${token}`,
+        live: true,
+        description: "PDF is generated on each view with the latest client data.",
       });
-      res.json(rows);
+    }),
+  );
+
+  r.get(
+    "/clients/:clientId/pdf",
+    asyncHandler(async (req: AuthedRequest, res) => {
+      const clientId = paramId(req.params, "clientId");
+      await assertClientAccessInline(req, clientId);
+      const download = req.query.download === "1" || req.query.download === "true";
+
+      const profile = await prisma.profileClient.findUnique({
+        where: { id: clientId },
+        select: { user: { select: { firstName: true, lastName: true } } },
+      });
+      if (!profile) throw new Error("Client not found");
+
+      await streamClientReportPdf(clientId, res, {
+        download,
+        firstName: profile.user.firstName,
+        lastName: profile.user.lastName,
+      });
     }),
   );
 

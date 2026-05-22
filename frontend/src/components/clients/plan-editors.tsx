@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { cachedApiGet } from "@/lib/api-cache";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,9 +42,8 @@ export function WorkoutPlanSection({ clientId, canEdit }: { clientId: string; ca
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
-    api
-      .get<WorkoutWeek[]>(`/workouts/clients/${clientId}/weeks`)
-      .then((res) => setWeeks(res.data))
+    cachedApiGet<WorkoutWeek[]>(`/workouts/clients/${clientId}/weeks`, 30_000)
+      .then(setWeeks)
       .catch(() => toast.error("Unable to load workouts"));
   }, [clientId, tick]);
 
@@ -419,9 +419,8 @@ export function DietPlanSection({ clientId, canEdit }: { clientId: string; canEd
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
-    api
-      .get<DietWeek[]>(`/diets/clients/${clientId}/weeks`)
-      .then((res) => setWeeks(res.data))
+    cachedApiGet<DietWeek[]>(`/diets/clients/${clientId}/weeks`, 30_000)
+      .then(setWeeks)
       .catch(() => toast.error("Unable to load diets"));
   }, [clientId, tick]);
 

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { useCachedGet } from "@/hooks/use-cached-get";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatCards } from "@/components/dashboard/stat-cards";
+import { formatDateIST, formatTimeIST } from "@/lib/datetime";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type Dashboard = {
@@ -16,17 +16,13 @@ type Dashboard = {
     goal: string | null;
   };
   membershipDaysRemaining: number | null;
-  pendingVerification: { verifyToken: string; expiresAt: string } | null;
+  pendingVerification: { expiresAt: string } | null;
 };
 
 export default function ClientDashboardPage() {
-  const [data, setData] = useState<Dashboard | null>(null);
+  const { data, loading } = useCachedGet<Dashboard>("/dashboard/client", 60_000);
 
-  useEffect(() => {
-    api.get<Dashboard>("/dashboard/client").then((res) => setData(res.data));
-  }, []);
-
-  if (!data) return <Skeleton className="h-64 w-full" />;
+  if (loading || !data) return <Skeleton className="h-64 w-full" />;
 
   const remaining = Math.max(data.client.totalSessions - data.client.sessionsCompleted, 0);
 
@@ -44,7 +40,7 @@ export default function ClientDashboardPage() {
           {
             label: "Membership runway",
             value: data.membershipDaysRemaining ?? "—",
-            hint: data.client.membershipEnd ? `Ends ${new Date(data.client.membershipEnd).toLocaleDateString()}` : "",
+            hint: data.client.membershipEnd ? `Ends ${formatDateIST(data.client.membershipEnd)}` : "",
           },
         ]}
       />
@@ -56,10 +52,11 @@ export default function ClientDashboardPage() {
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
             <p className="text-sm text-muted-foreground">
-              Your coach started a session — confirm before {new Date(data.pendingVerification.expiresAt).toLocaleTimeString()}.
+              Your coach started a session — enter their six-digit PIN before{" "}
+              {formatTimeIST(data.pendingVerification.expiresAt)} to verify.
             </p>
             <Button asChild>
-              <Link href={`/client/verify-attendance?token=${data.pendingVerification.verifyToken}`}>Verify now</Link>
+              <Link href="/client/verify-attendance">Enter PIN to verify</Link>
             </Button>
           </CardContent>
         </Card>

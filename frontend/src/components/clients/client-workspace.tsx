@@ -1,16 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { cachedApiGet } from "@/lib/api-cache";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ClientProgressTab } from "@/components/clients/client-progress-tab";
-import { DietPlanSection, WorkoutPlanSection } from "@/components/clients/plan-editors";
 import { ReportsTabToolbar } from "@/components/clients/reports-tab-content";
+import { AdminClientActions } from "@/components/clients/admin-client-actions";
+import { formatDateIST } from "@/lib/datetime";
+
+const ClientProgressTab = dynamic(
+  () => import("@/components/clients/client-progress-tab").then((m) => ({ default: m.ClientProgressTab })),
+  { loading: () => <Skeleton className="h-96 w-full" /> },
+);
+
+const WorkoutPlanSection = dynamic(
+  () => import("@/components/clients/plan-editors").then((m) => ({ default: m.WorkoutPlanSection })),
+  { loading: () => <Skeleton className="h-64 w-full" /> },
+);
+
+const DietPlanSection = dynamic(
+  () => import("@/components/clients/plan-editors").then((m) => ({ default: m.DietPlanSection })),
+  { loading: () => <Skeleton className="h-64 w-full" /> },
+);
 
 type ClientDetail = {
   id: string;
@@ -31,20 +47,28 @@ type ClientDetail = {
 export function ClientWorkspace({
   clientId,
   canEdit,
+  showAdminActions = false,
   initialTab = "overview",
 }: {
   clientId: string;
   canEdit: boolean;
+  /** Renew / remove client — admin only */
+  showAdminActions?: boolean;
   initialTab?: string;
 }) {
   const [client, setClient] = useState<ClientDetail | null>(null);
+  const [tab, setTab] = useState(initialTab);
 
-  useEffect(() => {
-    api
-      .get<ClientDetail>(`/clients/${clientId}`)
-      .then((res) => setClient(res.data))
+  const loadClient = useCallback(() => {
+    cachedApiGet<ClientDetail>(`/clients/${clientId}`, 30_000)
+      .then(setClient)
       .catch(() => toast.error("Unable to load profile"));
   }, [clientId]);
+
+  useEffect(() => {
+    setClient(null);
+    loadClient();
+  }, [loadClient]);
 
   if (!client) {
     return <Skeleton className="h-96 w-full" />;
@@ -57,22 +81,48 @@ export function ClientWorkspace({
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Client dossier</p>
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {client.user.firstName} {client.user.lastName}
           </h1>
           <p className="text-sm text-muted-foreground">{client.user.email}</p>
         </div>
-        <Badge variant="success">{remaining} sessions remaining</Badge>
+        <div className="flex flex-col items-start gap-3 sm:items-end">
+          <Badge variant="success">{remaining} sessions remaining</Badge>
+          {showAdminActions ? (
+            <AdminClientActions
+              clientId={client.id}
+              clientName={`${client.user.firstName} ${client.user.lastName}`}
+              membershipStart={client.membershipStart}
+              membershipEnd={client.membershipEnd}
+              totalSessions={client.totalSessions}
+              size="default"
+              onChanged={loadClient}
+              redirectAfterRemove="/admin/clients"
+            />
+          ) : null}
+        </div>
       </div>
 
-      <Tabs defaultValue={initialTab}>
-        <TabsList className="flex flex-wrap">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="attendance">Attendance</TabsTrigger>
-          <TabsTrigger value="workouts">Workout plan</TabsTrigger>
-          <TabsTrigger value="diet">Diet plan</TabsTrigger>
-          <TabsTrigger value="progress">Progress</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="max-sm:flex-nowrap max-sm:gap-1 max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:p-1 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
+          <TabsTrigger value="overview" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="attendance" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
+            Attendance
+          </TabsTrigger>
+          <TabsTrigger value="workouts" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
+            Workout plan
+          </TabsTrigger>
+          <TabsTrigger value="diet" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
+            Diet plan
+          </TabsTrigger>
+          <TabsTrigger value="progress" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
+            Progress
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
+            Reports
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -95,8 +145,7 @@ export function ClientWorkspace({
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Membership window</p>
                   <p>
-                    {client.membershipStart ? new Date(client.membershipStart).toLocaleDateString() : "—"} →{" "}
-                    {client.membershipEnd ? new Date(client.membershipEnd).toLocaleDateString() : "—"}
+                    {formatDateIST(client.membershipStart)} → {formatDateIST(client.membershipEnd)}
                   </p>
                 </div>
                 <div>
@@ -137,48 +186,52 @@ export function ClientWorkspace({
         </TabsContent>
 
         <TabsContent value="attendance">
-          <AttendanceTab clientId={clientId} />
+          {tab === "attendance" ? <AttendanceTab clientId={clientId} /> : null}
         </TabsContent>
 
         <TabsContent value="workouts">
-          <Card className="border-border/70">
-            <CardHeader>
-              <div className="space-y-1">
-                <CardTitle>Periodized resistance roadmap</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Build mesocycles from scratch — add days, prescribe loading parameters, revise anytime. Weeks stay on record (trainers cannot
-                  delete locked history; admins can intervene if corrections are mandatory).
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <WorkoutPlanSection clientId={clientId} canEdit={canEdit} />
-            </CardContent>
-          </Card>
+          {tab === "workouts" ? (
+            <Card className="border-border/70">
+              <CardHeader>
+                <div className="space-y-1">
+                  <CardTitle>Periodized resistance roadmap</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Build mesocycles from scratch — add days, prescribe loading parameters, revise anytime. Weeks stay on record (trainers cannot
+                    delete locked history; admins can intervene if corrections are mandatory).
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <WorkoutPlanSection clientId={clientId} canEdit={canEdit} />
+              </CardContent>
+            </Card>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="diet">
-          <Card className="border-border/70">
-            <CardHeader>
-              <div className="space-y-1">
-                <CardTitle>Nutrition architecture</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Engineer meal-by-meal prescriptions with automatic macro rollup per day inside each week accordion.
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <DietPlanSection clientId={clientId} canEdit={canEdit} />
-            </CardContent>
-          </Card>
+          {tab === "diet" ? (
+            <Card className="border-border/70">
+              <CardHeader>
+                <div className="space-y-1">
+                  <CardTitle>Nutrition architecture</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Engineer meal-by-meal prescriptions with automatic macro rollup per day inside each week accordion.
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <DietPlanSection clientId={clientId} canEdit={canEdit} />
+              </CardContent>
+            </Card>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="progress">
-          <ClientProgressTab clientId={clientId} canEdit={canEdit} />
+          {tab === "progress" ? <ClientProgressTab clientId={clientId} canEdit={canEdit} /> : null}
         </TabsContent>
 
         <TabsContent value="reports">
-          <ReportsTabToolbar clientId={clientId} canEdit={canEdit} />
+          {tab === "reports" ? <ReportsTabToolbar clientId={clientId} canEdit={canEdit} /> : null}
         </TabsContent>
       </Tabs>
     </div>
@@ -193,39 +246,49 @@ function AttendanceTab({ clientId }: { clientId: string }) {
       trainerStatus: string;
       clientStatus: string;
       sessionCompleted: boolean;
+      sessionCharged: boolean;
     }[]
   >([]);
 
   useEffect(() => {
-    api.get<{ data: typeof rows }>(`/attendance?clientId=${clientId}&pageSize=40`).then((res) => setRows(res.data.data));
+    cachedApiGet<{ data: typeof rows }>(`/attendance?clientId=${clientId}&pageSize=40`, 30_000).then((res) =>
+      setRows(res.data),
+    );
   }, [clientId]);
 
   return (
     <Card className="border-border/70">
       <CardHeader>
         <CardTitle>Attendance ledger</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          One row per gym calendar day (midnight–midnight). Past unverified days are marked client absent automatically.
+        </p>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Session day</TableHead>
-              <TableHead>Trainer</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Complete</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell>{new Date(r.sessionDate).toLocaleDateString()}</TableCell>
-                <TableCell>{r.trainerStatus}</TableCell>
-                <TableCell>{r.clientStatus}</TableCell>
-                <TableCell>{r.sessionCompleted ? "Yes" : "No"}</TableCell>
+        <div className="table-scroll">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Session day</TableHead>
+                <TableHead>Trainer</TableHead>
+                <TableHead>Client</TableHead>
+                <TableHead>Attended</TableHead>
+                <TableHead>Package charged</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{formatDateIST(r.sessionDate)}</TableCell>
+                  <TableCell>{r.trainerStatus}</TableCell>
+                  <TableCell>{r.clientStatus}</TableCell>
+                  <TableCell>{r.sessionCompleted ? "Yes" : "No"}</TableCell>
+                  <TableCell>{r.sessionCharged ? "Yes" : "No"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );

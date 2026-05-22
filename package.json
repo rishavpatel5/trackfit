@@ -1,0 +1,19 @@
+{
+  "name": "trackfit",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --prefix frontend",
+    "start": "npm run start --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "db:generate": "npm run db:generate --prefix backend",
+    "db:push": "npm run db:push --prefix backend",
+    "db:migrate": "npm run db:migrate --prefix backend",
+    "db:deploy": "npm run db:deploy --prefix backend",
+    "db:seed": "npm run db:seed --prefix backend",
+    "db:seed:admin": "npm run db:seed:admin --prefix backend"
+  }
+}

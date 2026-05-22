@@ -10,13 +10,83 @@ import { generateNumericPin, hashToken } from "../lib/password.js";
 import { parsePagination, sendList, getTrainerProfileId, getClientProfileId } from "./helpers.js";
 import { randomUUID } from "crypto";
 import { writeAudit } from "../services/audit.service.js";
+import { endOfGymSessionDay, formatGymDateLabel, gymSessionDate } from "../lib/gym-time.js";
+import {
+  closePastDaySessions,
+  computeSessionFlags,
+  syncSessionsCompleted,
+} from "../services/attendance-session.service.js";
 import QRCode from "qrcode";
 import { paramId } from "./params.js";
-import { syncClientSessionsCompletedFromLedger } from "../services/attendance-sync.service.js";
+
+async function completeClientVerification(recordId: string, clientId: string) {
+  return prisma.$transaction(async (tx) => {
+    const record = await tx.attendanceRecord.findFirst({
+      where: {
+        id: recordId,
+        clientId,
+        sessionDate: gymSessionDate(),
+      },
+    });
+    if (!record) throw new AppError(400, "Invalid or expired session for today");
+
+    if (record.clientStatus !== "PENDING") {
+      return record;
+    }
+
+    if (record.trainerStatus !== "PRESENT") {
+      throw new AppError(400, "Trainer marked absent — this session does not require client verification");
+    }
+
+    const flags = computeSessionFlags(record.trainerStatus, "PRESENT");
+    const updated = await tx.attendanceRecord.update({
+      where: { id: recordId },
+      data: {
+        clientStatus: "PRESENT",
+        clientVerifiedAt: new Date(),
+        ...flags,
+      },
+    });
+
+    if (updated.sessionCharged) {
+      await syncSessionsCompleted(clientId, tx);
+    }
+
+    return updated;
+  });
+}
+
+async function markClientAbsent(recordId: string, trainerId: string) {
+  const record = await prisma.attendanceRecord.findUnique({ where: { id: recordId } });
+  if (!record || record.trainerId !== trainerId) throw new AppError(404, "Record not found");
+
+  if (record.trainerStatus !== "PRESENT") {
+    throw new AppError(400, "Cannot mark client absent when trainer was absent for this day");
+  }
+
+  const flags = computeSessionFlags(record.trainerStatus, "ABSENT");
+  const updated = await prisma.attendanceRecord.update({
+    where: { id: recordId },
+    data: {
+      clientStatus: "ABSENT",
+      ...flags,
+    },
+  });
+
+  await syncSessionsCompleted(record.clientId);
+  return updated;
+}
 
 export function attendanceRouter(env: Env) {
   const r = Router();
   r.use(authMiddleware(env));
+
+  r.use(
+    asyncHandler(async (_req, _res, next) => {
+      await closePastDaySessions();
+      next();
+    }),
+  );
 
   r.get(
     "/",
@@ -57,11 +127,9 @@ export function attendanceRouter(env: Env) {
   r.get(
     "/analytics",
     asyncHandler(async (req: AuthedRequest, res) => {
-      let where: Prisma.AttendanceRecordWhereInput = {};
-
+      let clientScope: string | undefined;
       if (req.user!.role === "CLIENT") {
-        const cid = await getClientProfileId(req.user!.id);
-        where = { clientId: cid };
+        clientScope = await getClientProfileId(req.user!.id);
       } else if (req.user!.role === "TRAINER") {
         const tid = await getTrainerProfileId(req.user!.id);
         const clients = await prisma.profileClient.findMany({
@@ -69,37 +137,40 @@ export function attendanceRouter(env: Env) {
           select: { id: true },
         });
         const ids = clients.map((c) => c.id);
-        if (ids.length === 0) {
-          return res.json({
-            totalSessions: 0,
-            completedSessions: 0,
-            attendanceRatePercent: 0,
-            clientMissed: 0,
-            trainerMissed: 0,
-          });
-        }
-        where = { clientId: { in: ids } };
+        const rows = await prisma.attendanceRecord.findMany({
+          where: { clientId: { in: ids } },
+        });
+        return aggregateAttendance(rows, res);
       } else if (req.query.clientId) {
-        where = { clientId: String(req.query.clientId) };
+        clientScope = String(req.query.clientId);
       }
 
-      const [total, completed, clientAbsent, trainerAbsent] = await Promise.all([
-        prisma.attendanceRecord.count({ where }),
-        prisma.attendanceRecord.count({ where: { ...where, sessionCompleted: true } }),
-        prisma.attendanceRecord.count({ where: { ...where, clientStatus: "ABSENT" } }),
-        prisma.attendanceRecord.count({ where: { ...where, trainerStatus: "ABSENT" } }),
-      ]);
-
-      const attendancePct = total === 0 ? 0 : Math.round((completed / total) * 100);
-      res.json({
-        totalSessions: total,
-        completedSessions: completed,
-        attendanceRatePercent: attendancePct,
-        clientMissed: clientAbsent,
-        trainerMissed: trainerAbsent,
+      const rows = await prisma.attendanceRecord.findMany({
+        where: clientScope ? { clientId: clientScope } : {},
       });
+      return aggregateAttendance(rows, res);
     }),
   );
+
+  function aggregateAttendance(
+    rows: Awaited<ReturnType<typeof prisma.attendanceRecord.findMany>>,
+    res: import("express").Response,
+  ) {
+    const total = rows.length;
+    const completed = rows.filter((r) => r.sessionCompleted).length;
+    const charged = rows.filter((r) => r.sessionCharged).length;
+    const clientAbsent = rows.filter((r) => r.clientStatus === "ABSENT").length;
+    const trainerAbsent = rows.filter((r) => r.trainerStatus === "ABSENT").length;
+    const attendancePct = total === 0 ? 0 : Math.round((completed / total) * 100);
+    res.json({
+      totalSessions: total,
+      completedSessions: completed,
+      chargedSessions: charged,
+      attendanceRatePercent: attendancePct,
+      clientMissed: clientAbsent,
+      trainerMissed: trainerAbsent,
+    });
+  }
 
   const startSchema = z.object({
     clientId: z.string().uuid(),
@@ -118,27 +189,100 @@ export function attendanceRouter(env: Env) {
       });
       if (!client) throw new AppError(403, "Client not assigned to you");
 
-      const pendingOpen = await prisma.attendanceRecord.findFirst({
-        where: {
-          clientId: client.id,
-          clientStatus: "PENDING",
-          expiresAt: { gt: new Date() },
-        },
+      await closePastDaySessions();
+
+      const sessionDate = gymSessionDate();
+      const dayLabel = formatGymDateLabel();
+
+      const existing = await prisma.attendanceRecord.findUnique({
+        where: { clientId_sessionDate: { clientId: client.id, sessionDate } },
       });
-      if (pendingOpen) {
+
+      const trainerHeldSession = body.trainerStatus === "PRESENT";
+
+      if (existing && existing.clientStatus !== "PENDING") {
         throw new AppError(
           409,
-          "This client already has an active check-in (PIN not used yet or not expired). Wait for them to verify, or wait for the PIN to expire, before starting another session.",
+          `This client already has attendance logged for ${dayLabel} (${existing.clientStatus}). A new session starts on the next calendar day.`,
         );
       }
 
-      const sessionDate = new Date();
-      sessionDate.setHours(0, 0, 0, 0);
+      if (existing && existing.clientStatus === "PENDING" && trainerHeldSession) {
+        const pin = generateNumericPin(6);
+        const pinHash = hashToken(pin);
+        const verifyToken = randomUUID();
+        const expiresAt = endOfGymSessionDay();
+
+        const record = await prisma.attendanceRecord.update({
+          where: { id: existing.id },
+          data: {
+            pinHash,
+            verifyToken,
+            expiresAt,
+            trainerStatus: body.trainerStatus,
+            trainerCheckedAt: new Date(),
+            notes: body.notes ?? existing.notes,
+          },
+        });
+
+        const verifyUrl = `${env.FRONTEND_URL}/client/verify-attendance`;
+        const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 256 });
+
+        return res.status(200).json({
+          attendanceId: record.id,
+          pin,
+          verifyToken,
+          verifyUrl,
+          qrDataUrl,
+          expiresAt,
+          sessionDate: sessionDate.toISOString(),
+          refreshed: true,
+          message: "New PIN issued for today's calendar day.",
+        });
+      }
+
+      if (existing) {
+        throw new AppError(409, `Attendance for ${dayLabel} is already on file.`);
+      }
+
+      if (!trainerHeldSession) {
+        const flags = computeSessionFlags(body.trainerStatus, "ABSENT");
+        const record = await prisma.attendanceRecord.create({
+          data: {
+            clientId: client.id,
+            trainerId,
+            sessionDate,
+            pinHash: hashToken(randomUUID()),
+            verifyToken: randomUUID(),
+            expiresAt: new Date(sessionDate.getTime() + 24 * 60 * 60 * 1000),
+            trainerStatus: body.trainerStatus,
+            trainerCheckedAt: new Date(),
+            clientStatus: "ABSENT",
+            notes: body.notes,
+            ...flags,
+          },
+        });
+
+        await writeAudit({
+          actorId: req.user!.id,
+          entity: "AttendanceRecord",
+          entityId: record.id,
+          action: "TRAINER_ABSENT_DAY",
+          newValue: { clientId: client.id, sessionDate, trainerStatus: body.trainerStatus },
+        });
+
+        return res.status(201).json({
+          attendanceId: record.id,
+          trainerAbsent: true,
+          sessionCharged: false,
+          message: "Trainer absent — client package will not be charged for this day.",
+        });
+      }
 
       const pin = generateNumericPin(6);
       const pinHash = hashToken(pin);
       const verifyToken = randomUUID();
-      const expiresAt = new Date(Date.now() + env.ATTENDANCE_PIN_EXPIRY_MINUTES * 60 * 1000);
+      const expiresAt = endOfGymSessionDay();
 
       const record = await prisma.attendanceRecord.create({
         data: {
@@ -151,10 +295,11 @@ export function attendanceRouter(env: Env) {
           trainerStatus: body.trainerStatus,
           trainerCheckedAt: new Date(),
           notes: body.notes,
+          ...computeSessionFlags(body.trainerStatus, "PENDING"),
         },
       });
 
-      const verifyUrl = `${env.FRONTEND_URL}/client/verify-attendance?token=${verifyToken}`;
+      const verifyUrl = `${env.FRONTEND_URL}/client/verify-attendance`;
       const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 256 });
 
       await writeAudit({
@@ -172,12 +317,13 @@ export function attendanceRouter(env: Env) {
         verifyUrl,
         qrDataUrl,
         expiresAt,
+        sessionDate: sessionDate.toISOString(),
       });
     }),
   );
 
   const verifyPinSchema = z.object({
-    pin: z.string().min(1),
+    pin: z.string().length(6),
   });
 
   r.post(
@@ -186,68 +332,27 @@ export function attendanceRouter(env: Env) {
     asyncHandler(async (req: AuthedRequest, res) => {
       const body = verifyPinSchema.parse(req.body);
       const clientId = await getClientProfileId(req.user!.id);
-      const digits = body.pin.replace(/\D/g, "");
-      if (digits.length !== 6) throw new AppError(400, "PIN must be 6 digits");
-      const pinHash = hashToken(digits);
+      const pinHash = hashToken(body.pin);
+      await closePastDaySessions();
+
+      const sessionDate = gymSessionDate();
 
       const record = await prisma.attendanceRecord.findFirst({
         where: {
           clientId,
-          pinHash,
-          expiresAt: { gt: new Date() },
+          sessionDate,
           clientStatus: "PENDING",
+          trainerStatus: "PRESENT",
+          pinHash,
         },
         orderBy: { startedAt: "desc" },
       });
 
       if (!record) {
-        const anyPinMatch = await prisma.attendanceRecord.findFirst({
-          where: { clientId, pinHash },
-          orderBy: { startedAt: "desc" },
-        });
-        if (anyPinMatch) {
-          if (anyPinMatch.clientStatus !== "PENDING") {
-            throw new AppError(
-              400,
-              "This PIN was already used. If you opened the verification link first, that counts as check-in — ask your coach for a new session PIN if you still need to verify.",
-            );
-          }
-          if (anyPinMatch.expiresAt <= new Date()) {
-            throw new AppError(400, "This PIN has expired. Ask your coach to generate a new check-in.");
-          }
-        }
-        throw new AppError(400, "Invalid PIN. Confirm the digits with your coach, or use the verification link they shared.");
+        throw new AppError(400, "Invalid PIN, or today's session is already finalized");
       }
 
-      const trainerPresent = record.trainerStatus === "PRESENT";
-      const updatedRows = await prisma.attendanceRecord.updateMany({
-        where: {
-          id: record.id,
-          clientId,
-          clientStatus: "PENDING",
-          pinHash,
-          expiresAt: { gt: new Date() },
-        },
-        data: {
-          clientStatus: "PRESENT",
-          clientVerifiedAt: new Date(),
-          sessionCompleted: trainerPresent,
-        },
-      });
-
-      if (updatedRows.count === 0) {
-        const existing = await prisma.attendanceRecord.findUnique({ where: { id: record.id } });
-        if (existing && existing.clientStatus !== "PENDING") {
-          return res.json(existing);
-        }
-        throw new AppError(400, "Invalid or expired PIN");
-      }
-
-      const updated = await prisma.attendanceRecord.findUniqueOrThrow({ where: { id: record.id } });
-
-      if (updated.sessionCompleted) {
-        await syncClientSessionsCompletedFromLedger(clientId);
-      }
+      const updated = await completeClientVerification(record.id, clientId);
 
       await writeAudit({
         actorId: req.user!.id,
@@ -260,59 +365,19 @@ export function attendanceRouter(env: Env) {
     }),
   );
 
-  const verifyTokenSchema = z.object({
-    token: z.string().uuid(),
-  });
-
   r.post(
-    "/sessions/verify-token",
+    "/sessions/:id/mark-client-absent",
+    requireRoles("TRAINER"),
     asyncHandler(async (req: AuthedRequest, res) => {
-      if (!req.user || req.user.role !== "CLIENT") {
-        throw new AppError(401, "Clients only");
-      }
-      const body = verifyTokenSchema.parse(req.body);
-      const clientId = await getClientProfileId(req.user.id);
+      const trainerId = await getTrainerProfileId(req.user!.id);
+      const updated = await markClientAbsent(paramId(req.params, "id"), trainerId);
 
-      const record = await prisma.attendanceRecord.findFirst({
-        where: {
-          verifyToken: body.token,
-          clientId,
-          expiresAt: { gt: new Date() },
-          clientStatus: "PENDING",
-        },
+      await writeAudit({
+        actorId: req.user!.id,
+        entity: "AttendanceRecord",
+        entityId: updated.id,
+        action: "MARK_CLIENT_ABSENT",
       });
-
-      if (!record) throw new AppError(400, "Invalid or expired session");
-
-      const trainerPresent = record.trainerStatus === "PRESENT";
-      const updatedRows = await prisma.attendanceRecord.updateMany({
-        where: {
-          id: record.id,
-          clientId,
-          clientStatus: "PENDING",
-          verifyToken: body.token,
-          expiresAt: { gt: new Date() },
-        },
-        data: {
-          clientStatus: "PRESENT",
-          clientVerifiedAt: new Date(),
-          sessionCompleted: trainerPresent,
-        },
-      });
-
-      if (updatedRows.count === 0) {
-        const existing = await prisma.attendanceRecord.findUnique({ where: { id: record.id } });
-        if (existing && existing.clientStatus !== "PENDING") {
-          return res.json(existing);
-        }
-        throw new AppError(400, "Invalid or expired session");
-      }
-
-      const updated = await prisma.attendanceRecord.findUniqueOrThrow({ where: { id: record.id } });
-
-      if (updated.sessionCompleted) {
-        await syncClientSessionsCompletedFromLedger(clientId);
-      }
 
       res.json(updated);
     }),
@@ -321,7 +386,6 @@ export function attendanceRouter(env: Env) {
   const trainerUpdateSchema = z.object({
     trainerStatus: z.enum(["PRESENT", "ABSENT", "RESCHEDULED"]).optional(),
     clientStatus: z.enum(["PENDING", "PRESENT", "ABSENT", "RESCHEDULED"]).optional(),
-    sessionCompleted: z.boolean().optional(),
     notes: z.string().optional(),
   });
 
@@ -338,10 +402,21 @@ export function attendanceRouter(env: Env) {
         if (record.trainerId !== tid) throw new AppError(403, "Forbidden");
       }
 
+      const nextTrainer = body.trainerStatus ?? record.trainerStatus;
+      const nextClient = body.clientStatus ?? record.clientStatus;
+      const flags = computeSessionFlags(nextTrainer, nextClient);
+
       const updated = await prisma.attendanceRecord.update({
         where: { id: record.id },
-        data: body,
+        data: {
+          trainerStatus: body.trainerStatus,
+          clientStatus: body.clientStatus,
+          notes: body.notes,
+          ...flags,
+        },
       });
+
+      await syncSessionsCompleted(record.clientId);
 
       await writeAudit({
         actorId: req.user!.id,
@@ -351,8 +426,6 @@ export function attendanceRouter(env: Env) {
         oldValue: record,
         newValue: updated,
       });
-
-      await syncClientSessionsCompletedFromLedger(record.clientId);
 
       res.json(updated);
     }),

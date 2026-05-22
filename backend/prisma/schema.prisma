@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  // Use Supabase session/direct URL for migrate / introspect when DATABASE_URL points at PgBouncer (port 6543).
+  // Migrations / db push: use DIRECT_URL on Supabase port 5432 (not the 6543 pooler).
   directUrl = env("DIRECT_URL")
 }
 
@@ -102,6 +102,8 @@ model ProfileClient {
   membershipEnd     DateTime?
   totalSessions     Int       @default(0)
   sessionsCompleted Int       @default(0)
+  /// Stable token for the single live PDF dossier link (regenerated on each view).
+  reportToken       String?   @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -138,11 +140,14 @@ model AttendanceRecord {
   clientVerifiedAt DateTime?
 
   sessionCompleted Boolean @default(false)
+  /** Counts against the client's package (present together, or client no-show). */
+  sessionCharged   Boolean @default(false)
   notes             String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([clientId, sessionDate])
   @@index([clientId, sessionDate])
   @@index([trainerId, sessionDate])
   @@index([sessionDate])

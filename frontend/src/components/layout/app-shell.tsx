@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   Activity,
   ClipboardList,
@@ -76,7 +75,7 @@ export function AppShell({
     <div className="flex min-h-screen bg-[radial-gradient(ellipse_at_top,_rgba(220,38,38,0.12),transparent_55%),linear-gradient(180deg,#050505,#080808)]">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 border-r border-border bg-card/80 backdrop-blur-xl transition-transform lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 w-64 border-r border-border bg-card/95 transition-transform max-lg:backdrop-blur-md lg:bg-card/80 lg:backdrop-blur-xl lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -98,7 +97,7 @@ export function AppShell({
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                  "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors touch-manipulation",
                   active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
@@ -111,15 +110,16 @@ export function AppShell({
       </aside>
 
       <div className="flex flex-1 flex-col lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 px-4 backdrop-blur-xl md:px-8">
+        <header className="sticky top-0 z-30 flex h-14 min-h-14 items-center justify-between border-b border-border bg-background/95 px-4 pt-[env(safe-area-inset-top)] max-lg:backdrop-blur-md md:h-16 md:px-8 lg:bg-background/80 lg:backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)}>
+            <Button variant="ghost" size="icon" className="h-11 w-11 lg:hidden" onClick={() => setOpen(true)}>
               <Menu className="h-5 w-5" />
             </Button>
-            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="hidden md:block">
+            <div className="hidden md:block">
               <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Transformation intelligence</p>
               <p className="text-lg font-semibold">{title}</p>
-            </motion.div>
+            </div>
+            <p className="text-sm font-semibold md:hidden">{title}</p>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" className="hidden sm:inline-flex gap-2 border-border">
@@ -132,7 +132,7 @@ export function AppShell({
               </div>
               <div className="text-xs text-muted-foreground">{user?.role}</div>
             </div>
-            <Button variant="ghost" size="icon" onClick={logout}>
+            <Button variant="ghost" size="icon" className="h-11 w-11" onClick={logout}>
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -142,7 +142,7 @@ export function AppShell({
           <button type="button" className="fixed inset-0 z-30 bg-black/60 lg:hidden" aria-label="Close menu" onClick={() => setOpen(false)} />
         )}
 
-        <main className="flex-1 p-4 md:p-8">{children}</main>
+        <main className="flex-1 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-8">{children}</main>
       </div>
     </div>
   );

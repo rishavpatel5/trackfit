@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { cachedApiGet } from "@/lib/api-cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { formatDateIST } from "@/lib/datetime";
 
 type Row = {
   id: string;
@@ -14,6 +15,7 @@ type Row = {
   trainerStatus: string;
   clientStatus: string;
   sessionCompleted: boolean;
+  sessionCharged: boolean;
   client: { user: { firstName: string; lastName: string } };
   trainer: { user: { firstName: string; lastName: string } };
 };
@@ -23,9 +25,8 @@ export default function AdminAttendancePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<{ data: Row[] }>("/attendance?pageSize=50")
-      .then((res) => setRows(res.data.data))
+    cachedApiGet<{ data: Row[] }>("/attendance?pageSize=50", 30_000)
+      .then((res) => setRows(res.data))
       .catch(() => toast.error("Unable to load attendance"))
       .finally(() => setLoading(false));
   }, []);
@@ -44,6 +45,7 @@ export default function AdminAttendancePage() {
           {loading ? (
             <Skeleton className="h-56 w-full" />
           ) : (
+            <div className="table-scroll">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -51,13 +53,14 @@ export default function AdminAttendancePage() {
                   <TableHead>Client</TableHead>
                   <TableHead>Trainer status</TableHead>
                   <TableHead>Client status</TableHead>
-                  <TableHead>Done</TableHead>
+                  <TableHead>Attended</TableHead>
+                  <TableHead>Charged</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell>{new Date(r.sessionDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{formatDateIST(r.sessionDate)}</TableCell>
                     <TableCell>
                       {r.client.user.firstName} {r.client.user.lastName}
                     </TableCell>
@@ -71,10 +74,12 @@ export default function AdminAttendancePage() {
                       <Badge variant={r.clientStatus === "PRESENT" ? "success" : "default"}>{r.clientStatus}</Badge>
                     </TableCell>
                     <TableCell>{r.sessionCompleted ? "Yes" : "No"}</TableCell>
+                    <TableCell>{r.sessionCharged ? "Yes" : "No"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
