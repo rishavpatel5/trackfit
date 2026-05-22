@@ -1,4 +1,5 @@
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import type { PrismaClient } from "@prisma/client";
 import { formatDateIST } from "../lib/datetime-format.js";
 
@@ -258,9 +259,15 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
 }
 
 export async function renderPdfFromHtml(html: string) {
+  const executablePath =
+    process.env.NODE_ENV === "production"
+      ? await chromium.executablePath()
+      : undefined;
+
   const browser = await puppeteer.launch({
+    args: chromium.args,
+    executablePath,
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   try {
     const page = await browser.newPage();
