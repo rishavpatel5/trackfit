@@ -7,12 +7,15 @@ declare const schema: z.ZodObject<{
     }>>;
     PORT: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     DATABASE_URL: z.ZodString;
+    DIRECT_URL: z.ZodOptional<z.ZodString>;
     JWT_SECRET: z.ZodString;
     JWT_EXPIRES_IN: z.ZodDefault<z.ZodString>;
     FRONTEND_URL: z.ZodDefault<z.ZodString>;
     CLOUDINARY_CLOUD_NAME: z.ZodOptional<z.ZodString>;
     CLOUDINARY_API_KEY: z.ZodOptional<z.ZodString>;
     CLOUDINARY_API_SECRET: z.ZodOptional<z.ZodString>;
+    RESEND_API_KEY: z.ZodOptional<z.ZodString>;
+    EMAIL_FROM: z.ZodPreprocess<z.ZodOptional<z.ZodString>>;
     BCRYPT_ROUNDS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     ATTENDANCE_PIN_EXPIRY_MINUTES: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     RATE_LIMIT_WINDOW_MS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;

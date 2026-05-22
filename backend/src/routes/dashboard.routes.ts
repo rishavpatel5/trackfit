@@ -4,6 +4,7 @@ import { authMiddleware, requireRoles, type AuthedRequest } from "../middleware/
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { prisma } from "../lib/prisma.js";
 import { getClientProfileId, requireUserProfile } from "./helpers.js";
+import { syncClientSessionsCompletedFromLedger } from "../services/attendance-sync.service.js";
 
 export function dashboardRouter(env: Env) {
   const r = Router();
@@ -112,18 +113,24 @@ export function dashboardRouter(env: Env) {
       });
       if (!client) return res.status(404).json({ error: "Client not found" });
 
+      await syncClientSessionsCompletedFromLedger(client.id);
+      const clientSynced = await prisma.profileClient.findUniqueOrThrow({
+        where: { userId: req.user!.id },
+        include: { user: true, trainer: { include: { user: true } } },
+      });
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const attendance = await prisma.attendanceRecord.findMany({
-        where: { clientId: client.id },
+        where: { clientId: clientSynced.id },
         orderBy: { sessionDate: "desc" },
         take: 5,
       });
 
       const pendingPin = await prisma.attendanceRecord.findFirst({
         where: {
-          clientId: client.id,
+          clientId: clientSynced.id,
           clientStatus: "PENDING",
           expiresAt: { gt: new Date() },
         },
@@ -131,12 +138,12 @@ export function dashboardRouter(env: Env) {
         select: { id: true, verifyToken: true, expiresAt: true, sessionDate: true },
       });
 
-      const daysLeft = client.membershipEnd
-        ? Math.ceil((client.membershipEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      const daysLeft = clientSynced.membershipEnd
+        ? Math.ceil((clientSynced.membershipEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
         : null;
 
       res.json({
-        client,
+        client: clientSynced,
         recentAttendance: attendance,
         pendingVerification: pendingPin,
         membershipDaysRemaining: daysLeft,

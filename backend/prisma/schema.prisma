@@ -5,8 +5,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Use Supabase session/direct URL for migrate / introspect when DATABASE_URL points at PgBouncer (port 6543).
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -111,6 +113,8 @@ model ProfileClient {
   progressEntries   ProgressEntry[]
   progressPhotos    ProgressPhoto[]
   generatedReports  GeneratedReport[]
+
+  @@index([trainerId])
 }
 
 model AttendanceRecord {
@@ -141,6 +145,7 @@ model AttendanceRecord {
 
   @@index([clientId, sessionDate])
   @@index([trainerId, sessionDate])
+  @@index([sessionDate])
 }
 
 model WorkoutWeek {
@@ -157,6 +162,7 @@ model WorkoutWeek {
   days WorkoutDay[]
 
   @@unique([clientId, weekNumber])
+  @@index([clientId])
 }
 
 model WorkoutDay {
@@ -197,6 +203,7 @@ model DietWeek {
   days DietDay[]
 
   @@unique([clientId, weekNumber])
+  @@index([clientId])
 }
 
 model DietDay {
@@ -242,6 +249,8 @@ model Measurement {
   bmi       Float?
 
   recordedById String?
+
+  @@index([clientId, recordedAt])
 }
 
 model ProgressEntry {
@@ -261,6 +270,8 @@ model ProgressEntry {
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([clientId])
 }
 
 model ProgressPhoto {
@@ -273,6 +284,8 @@ model ProgressPhoto {
   publicId     String?
   uploadedById String?
   createdAt    DateTime @default(now())
+
+  @@index([clientId])
 }
 
 model GeneratedReport {
@@ -282,6 +295,8 @@ model GeneratedReport {
   url           String
   generatedById String
   createdAt     DateTime @default(now())
+
+  @@index([clientId])
 }
 
 model Notification {

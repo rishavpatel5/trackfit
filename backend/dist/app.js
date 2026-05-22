@@ -1,6 +1,7 @@
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
+import compression from "compression";
 import rateLimit from "express-rate-limit";
 import { errorMiddleware } from "./middleware/errorMiddleware.js";
 import { authRouter } from "./routes/auth.routes.js";
@@ -18,12 +19,16 @@ import { auditRouter } from "./routes/audit.routes.js";
 import { uploadRouter } from "./routes/upload.routes.js";
 export function createApp(env) {
     const app = express();
+    if (env.NODE_ENV === "production") {
+        app.set("trust proxy", 1);
+    }
     app.disable("x-powered-by");
     app.use(helmet());
     app.use(cors({
         origin: env.FRONTEND_URL,
         credentials: true,
     }));
+    app.use(compression({ threshold: 2048 }));
     app.use(express.json({ limit: "2mb" }));
     app.use(rateLimit({
         windowMs: env.RATE_LIMIT_WINDOW_MS,

@@ -9,6 +9,7 @@ import { asyncHandler } from "../middleware/asyncHandler.js";
 import { authMiddleware, type AuthedRequest } from "../middleware/authMiddleware.js";
 import { AppError } from "../lib/AppError.js";
 import crypto from "crypto";
+import { sendPasswordResetEmail } from "../lib/email.js";
 
 export function authRouter(env: Env) {
   const r = Router();
@@ -73,6 +74,8 @@ export function authRouter(env: Env) {
       await prisma.passwordResetToken.create({
         data: { userId: user.id, tokenHash, expiresAt },
       });
+
+      await sendPasswordResetEmail(env, user.email, raw);
 
       const payload: { message: string; resetToken?: string } = {
         message: "If the account exists, reset instructions were sent.",

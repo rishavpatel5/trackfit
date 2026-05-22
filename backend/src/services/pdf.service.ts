@@ -18,7 +18,8 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
       measurements: { orderBy: { recordedAt: "desc" }, take: 12 },
       attendanceRecords: { orderBy: { sessionDate: "desc" }, take: 60 },
       workoutWeeks: {
-        orderBy: { weekNumber: "asc" },
+        orderBy: { weekNumber: "desc" },
+        take: 24,
         include: {
           days: {
             orderBy: { sortOrder: "asc" },
@@ -27,7 +28,8 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
         },
       },
       dietWeeks: {
-        orderBy: { weekNumber: "asc" },
+        orderBy: { weekNumber: "desc" },
+        take: 24,
         include: {
           days: {
             orderBy: { sortOrder: "asc" },
@@ -41,6 +43,9 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
   });
 
   if (!client) throw new Error("Client not found");
+
+  const workoutWeeksAsc = [...client.workoutWeeks].sort((a, b) => a.weekNumber - b.weekNumber);
+  const dietWeeksAsc = [...client.dietWeeks].sort((a, b) => a.weekNumber - b.weekNumber);
 
   const attendanceSummary = client.attendanceRecords.reduce(
     (acc, r) => {
@@ -64,7 +69,7 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
     )
     .join("");
 
-  const workoutBlocks = client.workoutWeeks
+  const workoutBlocks = workoutWeeksAsc
     .map((w) => {
       const days = w.days
         .map((d) => {
@@ -81,7 +86,7 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
     })
     .join("");
 
-  const dietBlocks = client.dietWeeks
+  const dietBlocks = dietWeeksAsc
     .map((w) => {
       const days = w.days
         .map((d) => {

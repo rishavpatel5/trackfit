@@ -1,1 +1,1 @@
-{"version":3,"file":"attendance.routes.d.ts","sourceRoot":"","sources":["../../src/routes/attendance.routes.ts"],"names":[],"mappings":"AAGA,OAAO,KAAK,EAAE,GAAG,EAAE,MAAM,eAAe,CAAC;AAYzC,wBAAgB,gBAAgB,CAAC,GAAG,EAAE,GAAG,8CA0RxC"}
+{"version":3,"file":"attendance.routes.d.ts","sourceRoot":"","sources":["../../src/routes/attendance.routes.ts"],"names":[],"mappings":"AAGA,OAAO,KAAK,EAAE,GAAG,EAAE,MAAM,eAAe,CAAC;AAazC,wBAAgB,gBAAgB,CAAC,GAAG,EAAE,GAAG,8CAyVxC"}

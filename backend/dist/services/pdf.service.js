@@ -15,7 +15,8 @@ export async function buildClientReportHtml(prisma, clientId) {
             measurements: { orderBy: { recordedAt: "desc" }, take: 12 },
             attendanceRecords: { orderBy: { sessionDate: "desc" }, take: 60 },
             workoutWeeks: {
-                orderBy: { weekNumber: "asc" },
+                orderBy: { weekNumber: "desc" },
+                take: 24,
                 include: {
                     days: {
                         orderBy: { sortOrder: "asc" },
@@ -24,7 +25,8 @@ export async function buildClientReportHtml(prisma, clientId) {
                 },
             },
             dietWeeks: {
-                orderBy: { weekNumber: "asc" },
+                orderBy: { weekNumber: "desc" },
+                take: 24,
                 include: {
                     days: {
                         orderBy: { sortOrder: "asc" },
@@ -38,6 +40,8 @@ export async function buildClientReportHtml(prisma, clientId) {
     });
     if (!client)
         throw new Error("Client not found");
+    const workoutWeeksAsc = [...client.workoutWeeks].sort((a, b) => a.weekNumber - b.weekNumber);
+    const dietWeeksAsc = [...client.dietWeeks].sort((a, b) => a.weekNumber - b.weekNumber);
     const attendanceSummary = client.attendanceRecords.reduce((acc, r) => {
         if (r.sessionCompleted)
             acc.completed += 1;
@@ -56,7 +60,7 @@ export async function buildClientReportHtml(prisma, clientId) {
         <td>${m.waist ?? ""}</td>
       </tr>`)
         .join("");
-    const workoutBlocks = client.workoutWeeks
+    const workoutBlocks = workoutWeeksAsc
         .map((w) => {
         const days = w.days
             .map((d) => {
@@ -69,7 +73,7 @@ export async function buildClientReportHtml(prisma, clientId) {
         return `<section style="page-break-inside:avoid;margin-bottom:16px;border:1px solid #eee;padding:12px;border-radius:8px"><h3>Week ${w.weekNumber}</h3>${days}</section>`;
     })
         .join("");
-    const dietBlocks = client.dietWeeks
+    const dietBlocks = dietWeeksAsc
         .map((w) => {
         const days = w.days
             .map((d) => {

@@ -1,282 +1,68 @@
-import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const prisma = new PrismaClient();
 
 async function main() {
+  const adminEmail = (process.env.SEED_ADMIN_EMAIL ?? "").trim().toLowerCase();
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "";
+  const forcePassword = process.env.SEED_FORCE_ADMIN_PASSWORD === "true";
+
+  if (!adminEmail || !adminPassword) {
+    throw new Error(
+      "Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in backend/.env before running the seed. " +
+        "Example: SEED_ADMIN_EMAIL=you@company.com SEED_ADMIN_PASSWORD='YourStrongPassword!'",
+    );
+  }
+  if (adminPassword.length < 8) {
+    throw new Error("SEED_ADMIN_PASSWORD must be at least 8 characters.");
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
+  if (existing && existing.role !== "ADMIN") {
+    throw new Error(`User ${adminEmail} already exists with role ${existing.role}. Use another email or remove that user first.`);
+  }
+
   const rounds = Number(process.env.BCRYPT_ROUNDS ?? 12);
-  const passwordHash = await bcrypt.hash("Demo123!", rounds);
+  const passwordHash = await bcrypt.hash(adminPassword, rounds);
+  const firstName = (process.env.SEED_ADMIN_FIRST_NAME ?? "Admin").trim() || "Admin";
+  const lastName = (process.env.SEED_ADMIN_LAST_NAME ?? "User").trim() || "User";
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@gvtrainer.demo" },
-    update: {},
+    where: { email: adminEmail },
+    update: forcePassword ? { passwordHash, firstName, lastName } : {},
     create: {
-      email: "admin@gvtrainer.demo",
+      email: adminEmail,
       passwordHash,
       role: "ADMIN",
-      firstName: "Alex",
-      lastName: "Admin",
-      phone: "+10000000001",
+      firstName,
+      lastName,
+      phone: process.env.SEED_ADMIN_PHONE?.trim() || null,
     },
-  });
-
-  const trainerUser = await prisma.user.upsert({
-    where: { email: "trainer@gvtrainer.demo" },
-    update: {},
-    create: {
-      email: "trainer@gvtrainer.demo",
-      passwordHash,
-      role: "TRAINER",
-      firstName: "Taylor",
-      lastName: "Trainer",
-      phone: "+10000000002",
-    },
-  });
-
-  const trainer = await prisma.profileTrainer.upsert({
-    where: { userId: trainerUser.id },
-    update: {},
-    create: {
-      userId: trainerUser.id,
-      specialization: "Strength & conditioning",
-      bio: "National academy certified coach focused on elite transformations.",
-    },
-  });
-
-  const clientUser = await prisma.user.upsert({
-    where: { email: "client@gvtrainer.demo" },
-    update: {},
-    create: {
-      email: "client@gvtrainer.demo",
-      passwordHash,
-      role: "CLIENT",
-      firstName: "Casey",
-      lastName: "Client",
-      phone: "+10000000003",
-    },
-  });
-
-  const membershipEnd = new Date();
-  membershipEnd.setMonth(membershipEnd.getMonth() + 2);
-
-  const client = await prisma.profileClient.upsert({
-    where: { userId: clientUser.id },
-    update: {},
-    create: {
-      userId: clientUser.id,
-      trainerId: trainer.id,
-      age: 32,
-      gender: "OTHER",
-      emergencyContact: "Jamie Client",
-      emergencyPhone: "+10000000004",
-      goal: "Drop 8kg while maintaining strength",
-      medicalNotes: "No injuries reported — clearance on file.",
-      membershipStart: new Date(),
-      membershipEnd,
-      totalSessions: 36,
-      sessionsCompleted: 6,
-    },
-  });
-
-  await prisma.measurement.createMany({
-    data: [
-      {
-        clientId: client.id,
-        weight: 92,
-        height: 178,
-        waist: 94,
-        chest: 104,
-        hips: 102,
-        biceps: 36,
-        forearms: 29,
-        thigh: 62,
-        calves: 39,
-        bodyFat: 22,
-        bmi: 29.0,
-        recordedById: trainerUser.id,
-      },
-      {
-        clientId: client.id,
-        weight: 89.5,
-        waist: 91,
-        bodyFat: 20,
-        bmi: 28.2,
-        recordedById: trainerUser.id,
-      },
-    ],
-  });
-
-  const workoutWeek = await prisma.workoutWeek.upsert({
-    where: {
-      clientId_weekNumber: { clientId: client.id, weekNumber: 1 },
-    },
-    update: {},
-    create: {
-      clientId: client.id,
-      weekNumber: 1,
-      createdById: trainerUser.id,
-      updatedById: trainerUser.id,
-      days: {
-        create: [
-          {
-            label: "Monday — Strength",
-            sortOrder: 0,
-            exercises: {
-              create: [
-                {
-                  name: "Bench Press",
-                  sets: 4,
-                  reps: "8-10",
-                  weight: "60kg",
-                  restSec: 120,
-                  tempo: "3-1-1",
-                  notes: "Controlled eccentric",
-                  sortOrder: 0,
-                },
-                {
-                  name: "Lat Pulldown",
-                  sets: 3,
-                  reps: "12",
-                  weight: "55kg",
-                  restSec: 90,
-                  tempo: "2-0-2",
-                  sortOrder: 1,
-                },
-              ],
-            },
-          },
-          {
-            label: "Wednesday — Lower",
-            sortOrder: 1,
-            exercises: {
-              create: [
-                {
-                  name: "Back Squat",
-                  sets: 5,
-                  reps: "5",
-                  weight: "90kg",
-                  restSec: 180,
-                  tempo: "3-1-X",
-                  sortOrder: 0,
-                },
-                {
-                  name: "Romanian Deadlift",
-                  sets: 3,
-                  reps: "10",
-                  weight: "70kg",
-                  restSec: 120,
-                  tempo: "3-2-1",
-                  sortOrder: 1,
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  });
-
-  await prisma.dietWeek.upsert({
-    where: {
-      clientId_weekNumber: { clientId: client.id, weekNumber: 1 },
-    },
-    update: {},
-    create: {
-      clientId: client.id,
-      weekNumber: 1,
-      createdById: trainerUser.id,
-      updatedById: trainerUser.id,
-      days: {
-        create: [
-          {
-            label: "Monday",
-            sortOrder: 0,
-            meals: {
-              create: [
-                {
-                  slotLabel: "Breakfast",
-                  foodName: "Egg whites & oats",
-                  quantity: "200g whites / 80g oats",
-                  calories: 520,
-                  protein: 42,
-                  carbs: 58,
-                  fat: 12,
-                  sortOrder: 0,
-                },
-                {
-                  slotLabel: "Lunch",
-                  foodName: "Chicken salad bowl",
-                  quantity: "180g chicken",
-                  calories: 640,
-                  protein: 55,
-                  carbs: 38,
-                  fat: 22,
-                  sortOrder: 1,
-                },
-                {
-                  slotLabel: "Dinner",
-                  foodName: "Salmon & quinoa",
-                  quantity: "160g salmon",
-                  calories: 700,
-                  protein: 48,
-                  carbs: 52,
-                  fat: 28,
-                  sortOrder: 2,
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  });
-
-  await prisma.progressEntry.create({
-    data: {
-      clientId: client.id,
-      weekNumber: 1,
-      weekStartDate: new Date(),
-      trainerComments: "Solid technique improvements on squat depth.",
-      recovery: "Good — sleeping 7h average",
-      energyLevel: "High",
-      performanceNotes: "Hit all prescribed loads.",
-      strengthNotes: "+5kg squat vs baseline",
-      createdById: trainerUser.id,
-    },
-  });
-
-  await prisma.notification.createMany({
-    data: [
-      {
-        userId: clientUser.id,
-        type: "MEMBERSHIP_EXPIRING",
-        title: "Membership checkpoint",
-        body: `Renewal window opens ${membershipEnd.toISOString().slice(0, 10)}.`,
-      },
-      {
-        userId: trainerUser.id,
-        type: "ATTENDANCE_REMINDER",
-        title: "Attendance pulse",
-        body: "Review pending verifications before tonight's sessions.",
-      },
-    ],
   });
 
   await prisma.auditLog.create({
     data: {
       actorId: admin.id,
-      entity: "Seed",
-      entityId: workoutWeek.id,
-      action: "SEED_DATABASE",
-      newValue: { message: "Demo dataset provisioned" },
+      entity: "User",
+      entityId: admin.id,
+      action: "SEED_ADMIN",
+      newValue: { email: adminEmail, message: "Bootstrap admin only (no demo trainer/client)." },
     },
   });
 
-  console.log("Seed complete:");
-  console.log("  Admin     admin@gvtrainer.demo / Demo123!");
-  console.log("  Trainer   trainer@gvtrainer.demo / Demo123!");
-  console.log("  Client    client@gvtrainer.demo / Demo123!");
+  console.log("Seed complete.");
+  console.log(`  Admin user: ${adminEmail}`);
+  console.log("  Sign in with the password from SEED_ADMIN_PASSWORD (not printed here).");
+  if (!forcePassword) {
+    console.log("  To reset this admin's password, set SEED_FORCE_ADMIN_PASSWORD=true and run seed again.");
+  }
 }
 
 main()

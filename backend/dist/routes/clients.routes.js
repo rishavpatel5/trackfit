@@ -9,6 +9,7 @@ import { getTrainerProfileId, parsePagination, sendList, } from "./helpers.js";
 import { writeAudit } from "../services/audit.service.js";
 import { paramId } from "./params.js";
 import { notifyUser } from "../services/notification.service.js";
+import { syncClientSessionsCompletedFromLedger } from "../services/attendance-sync.service.js";
 async function assertClientAccess(req, clientId) {
     const role = req.user.role;
     if (role === "ADMIN")
@@ -151,7 +152,15 @@ export function clientsRouter(env) {
         });
         if (!client)
             throw new AppError(404, "Client not found");
-        res.json(client);
+        await syncClientSessionsCompletedFromLedger(cid);
+        const synced = await prisma.profileClient.findUniqueOrThrow({
+            where: { id: cid },
+            include: {
+                user: true,
+                trainer: { include: { user: true } },
+            },
+        });
+        res.json(synced);
     }));
     const updateSchema = z.object({
         trainerId: z.string().uuid().optional(),
