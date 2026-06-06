@@ -96,15 +96,6 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
       trainer: { include: { user: true } },
       measurements: { orderBy: { recordedAt: "desc" } },
       attendanceRecords: { orderBy: { sessionDate: "desc" } },
-      workoutWeeks: {
-        orderBy: { weekNumber: "asc" },
-        include: {
-          days: {
-            orderBy: { sortOrder: "asc" },
-            include: { exercises: { orderBy: { sortOrder: "asc" } } },
-          },
-        },
-      },
       dietWeeks: {
         orderBy: { weekNumber: "asc" },
         include: {
@@ -146,23 +137,6 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
     )
     .join("");
 
-  const workoutBlocks = client.workoutWeeks
-    .map((w) => {
-      const days = w.days
-        .map((d) => {
-          const ex = d.exercises
-            .map(
-              (e) =>
-                `<li>${escapeHtml(e.name)} — sets ${e.sets ?? "-"}, reps ${escapeHtml(e.reps ?? "-")}, weight ${escapeHtml(e.weight ?? "-")}</li>`,
-            )
-            .join("");
-          return `<div style="margin-bottom:8px"><strong>${escapeHtml(d.label)}</strong><ul>${ex}</ul></div>`;
-        })
-        .join("");
-      return `<section style="page-break-inside:avoid;margin-bottom:16px;border:1px solid #eee;padding:12px;border-radius:8px"><h3>Week ${w.weekNumber}</h3>${days}</section>`;
-    })
-    .join("");
-
   const dietBlocks = client.dietWeeks
     .map((w) => {
       const days = w.days
@@ -188,6 +162,7 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
     .join("");
 
   const photoRow = client.progressPhotos
+    .filter((ph) => ph.type !== "WEEKLY")
     .map(
       (ph) =>
         `<div style="display:inline-block;margin:6px;text-align:center;width:140px"><img src="${escapeHtml(ph.url)}" style="width:140px;height:140px;object-fit:cover;border-radius:8px"/><div style="font-size:10px">${ph.type}</div></div>`,
@@ -247,8 +222,6 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
   ${weightChart}
   <h2>Measurements</h2>
   <table><thead><tr><th>Date</th><th>Weight</th><th>Body fat %</th><th>Waist</th></tr></thead><tbody>${rowsMeasurements}</tbody></table>
-  <h2>Workout history</h2>
-  ${workoutBlocks}
   <h2>Diet history</h2>
   ${dietBlocks}
   <h2>Progress notes</h2>

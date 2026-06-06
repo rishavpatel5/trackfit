@@ -7,7 +7,7 @@ const schema = z.object({
   /** Session/direct Postgres URL (Supabase :5432). Defaults to DATABASE_URL when omitted (local dev). */
   DIRECT_URL: z.string().optional(),
   JWT_SECRET: z.string().min(16),
-  JWT_EXPIRES_IN: z.string().default("7d"),
+  JWT_EXPIRES_IN: z.string().default("3650d"),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),

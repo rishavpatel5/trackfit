@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAuthHydrated } from "@/hooks/use-auth-hydrated";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -12,12 +13,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+function homeForRole(role: AuthUser["role"]) {
+  if (role === "ADMIN") return "/admin";
+  if (role === "TRAINER") return "/trainer";
+  return "/client";
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const hydrated = useAuthHydrated();
+  const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
   const setAuth = useAuthStore((s) => s.setAuth);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated || !token || !user) return;
+    router.replace(homeForRole(user.role));
+  }, [hydrated, token, user, router]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,9 +41,7 @@ export default function LoginPage() {
       const { data } = await api.post<{ token: string; user: AuthUser }>("/auth/login", { email, password });
       setAuth(data.token, data.user);
       toast.success("Welcome back");
-      if (data.user.role === "ADMIN") router.replace("/admin");
-      else if (data.user.role === "TRAINER") router.replace("/trainer");
-      else router.replace("/client");
+      router.replace(homeForRole(data.user.role));
     } catch {
       toast.error("Invalid credentials");
     } finally {

@@ -38,14 +38,13 @@ export function defaultNewClientForm(trainerId = ""): NewClientFormState {
   };
 }
 
-export function buildCreateClientPayload(form: NewClientFormState) {
-  return {
+export function buildCreateClientPayload(form: NewClientFormState, options?: { omitTrainerId?: boolean }) {
+  const payload: Record<string, unknown> = {
     email: form.email,
     password: form.password,
     firstName: form.firstName,
     lastName: form.lastName,
     phone: form.phone || undefined,
-    trainerId: form.trainerId,
     goal: form.goal || undefined,
     medicalNotes: form.medicalNotes || undefined,
     emergencyContact: form.emergencyContact || undefined,
@@ -55,4 +54,8 @@ export function buildCreateClientPayload(form: NewClientFormState) {
     membershipStart: form.membershipStart,
     totalSessions: form.totalSessions,
   };
+  if (!options?.omitTrainerId && form.trainerId) {
+    payload.trainerId = form.trainerId;
+  }
+  return payload;
 }

@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   ClipboardList,
-  Dumbbell,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -41,14 +40,12 @@ const trainerNav: NavItem[] = [
   { href: "/trainer", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
   { href: "/trainer/clients", label: "My clients", icon: <Users className="h-4 w-4" /> },
   { href: "/trainer/attendance", label: "Attendance", icon: <ScanLine className="h-4 w-4" /> },
-  { href: "/trainer/workouts", label: "Workout plans", icon: <Dumbbell className="h-4 w-4" /> },
   { href: "/trainer/diet", label: "Diet plans", icon: <Apple className="h-4 w-4" /> },
   { href: "/trainer/progress", label: "Progress", icon: <LineChart className="h-4 w-4" /> },
 ];
 
 const clientNav: NavItem[] = [
   { href: "/client", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
-  { href: "/client/workouts", label: "My workout", icon: <Dumbbell className="h-4 w-4" /> },
   { href: "/client/diet", label: "My diet", icon: <Utensils className="h-4 w-4" /> },
   { href: "/client/attendance", label: "Attendance", icon: <ClipboardList className="h-4 w-4" /> },
   { href: "/client/progress", label: "Progress", icon: <LineChart className="h-4 w-4" /> },
@@ -66,8 +63,14 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
+
+  function handleLogout() {
+    logout();
+    router.replace("/login");
+  }
   const nav = variant === "admin" ? adminNav : variant === "trainer" ? trainerNav : clientNav;
   const [open, setOpen] = useState(false);
 
@@ -132,7 +135,7 @@ export function AppShell({
               </div>
               <div className="text-xs text-muted-foreground">{user?.role}</div>
             </div>
-            <Button variant="ghost" size="icon" className="h-11 w-11" onClick={logout}>
+            <Button variant="ghost" size="icon" className="h-11 w-11" onClick={handleLogout}>
               <LogOut className="h-4 w-4" />
             </Button>
           </div>

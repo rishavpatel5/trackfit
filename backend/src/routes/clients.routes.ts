@@ -86,14 +86,14 @@ export function clientsRouter(env: Env) {
   );
 
   const adminOnly = requireRoles("ADMIN");
+  const createAllowed = requireRoles("ADMIN", "TRAINER");
 
-  const createSchema = z.object({
+  const createSchemaBase = {
     email: z.string().email(),
     password: z.string().min(8),
     firstName: z.string().min(1),
     lastName: z.string().min(1),
     phone: z.string().optional(),
-    trainerId: z.string().uuid(),
     age: z.number().int().optional(),
     gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
     emergencyContact: z.string().optional(),
@@ -103,14 +103,26 @@ export function clientsRouter(env: Env) {
     membershipStart: z.coerce.date(),
     totalSessions: z.number().int().positive(),
     sessionsCompleted: z.number().int().nonnegative().optional(),
+  };
+
+  const createSchemaAdmin = z.object({
+    ...createSchemaBase,
+    trainerId: z.string().uuid(),
   });
+
+  const createSchemaTrainer = z.object(createSchemaBase);
 
   r.post(
     "/",
-    adminOnly,
+    createAllowed,
     asyncHandler(async (req: AuthedRequest, res) => {
-      const body = createSchema.parse(req.body);
-      const trainer = await prisma.profileTrainer.findUnique({ where: { id: body.trainerId } });
+      const isTrainer = req.user!.role === "TRAINER";
+      const body = isTrainer ? createSchemaTrainer.parse(req.body) : createSchemaAdmin.parse(req.body);
+      const trainerId = isTrainer
+        ? await getTrainerProfileId(req.user!.id)
+        : (body as z.infer<typeof createSchemaAdmin>).trainerId;
+
+      const trainer = await prisma.profileTrainer.findUnique({ where: { id: trainerId } });
       if (!trainer) throw new AppError(404, "Trainer not found");
 
       const exists = await prisma.user.findUnique({ where: { email: body.email.toLowerCase() } });
@@ -134,7 +146,7 @@ export function clientsRouter(env: Env) {
         return tx.profileClient.create({
           data: {
             userId: user.id,
-            trainerId: body.trainerId,
+            trainerId,
             age: body.age,
             gender: body.gender,
             emergencyContact: body.emergencyContact,

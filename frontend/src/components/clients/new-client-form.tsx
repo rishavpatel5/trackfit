@@ -22,23 +22,25 @@ export function NewClientForm({
   trainers,
   onSubmit,
   submitLabel = "Create client",
+  hideTrainerPicker = false,
 }: {
   form: NewClientFormState;
   setForm: React.Dispatch<React.SetStateAction<NewClientFormState>>;
   trainers: TrainerMini[];
   onSubmit: (e: React.FormEvent) => void;
   submitLabel?: string;
+  hideTrainerPicker?: boolean;
 }) {
   const computedEnd = useMemo(
     () => membershipEndFromStartAndSessions(form.membershipStart, form.totalSessions),
     [form.membershipStart, form.totalSessions],
   );
 
-  const canSubmit = trainers.length > 0 && Boolean(form.trainerId);
+  const canSubmit = hideTrainerPicker || (trainers.length > 0 && Boolean(form.trainerId));
 
   return (
     <form className="space-y-6" onSubmit={onSubmit}>
-      {trainers.length === 0 ? (
+      {!hideTrainerPicker && trainers.length === 0 ? (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
           Add a trainer before creating clients.
         </p>
@@ -78,22 +80,24 @@ export function NewClientForm({
 
       <section className="space-y-3">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Coaching</p>
-        <div>
-          <Label>Coach (trainer)</Label>
-          <select
-            required
-            className={selectClass}
-            value={form.trainerId}
-            onChange={(e) => setForm({ ...form, trainerId: e.target.value })}
-            disabled={trainers.length === 0}
-          >
-            {trainers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.user.firstName} {t.user.lastName}
-              </option>
-            ))}
-          </select>
-        </div>
+        {!hideTrainerPicker ? (
+          <div>
+            <Label>Coach (trainer)</Label>
+            <select
+              required
+              className={selectClass}
+              value={form.trainerId}
+              onChange={(e) => setForm({ ...form, trainerId: e.target.value })}
+              disabled={trainers.length === 0}
+            >
+              {trainers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.user.firstName} {t.user.lastName}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         <div>
           <Label>Goal</Label>
           <Input value={form.goal} onChange={(e) => setForm({ ...form, goal: e.target.value })} placeholder="e.g. Weight loss" />

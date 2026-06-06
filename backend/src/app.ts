@@ -10,7 +10,6 @@ import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { trainersRouter } from "./routes/trainers.routes.js";
 import { clientsRouter } from "./routes/clients.routes.js";
 import { attendanceRouter } from "./routes/attendance.routes.js";
-import { workoutsRouter } from "./routes/workouts.routes.js";
 import { dietsRouter } from "./routes/diets.routes.js";
 import { measurementsRouter } from "./routes/measurements.routes.js";
 import { progressRouter } from "./routes/progress.routes.js";
@@ -53,7 +52,6 @@ export function createApp(env: Env) {
   app.use("/trainers", trainersRouter(env));
   app.use("/clients", clientsRouter(env));
   app.use("/attendance", attendanceRouter(env));
-  app.use("/workouts", workoutsRouter(env));
   app.use("/diets", dietsRouter(env));
   app.use("/measurements", measurementsRouter(env));
   app.use("/progress", progressRouter(env));

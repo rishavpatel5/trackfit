@@ -103,7 +103,7 @@ export function progressRouter(env: Env) {
   );
 
   const photoSchema = z.object({
-    type: z.enum(["BEFORE", "AFTER", "WEEKLY"]),
+    type: z.enum(["BEFORE", "AFTER"]),
     weekNumber: z.number().int().optional(),
     url: z.string().url(),
     publicId: z.string().optional(),

@@ -1,10 +1,20 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useCachedGet } from "@/hooks/use-cached-get";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
+import { cachedApiGet, invalidateApiCache } from "@/lib/api-cache";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  NewClientForm,
+  buildCreateClientPayload,
+  defaultNewClientForm,
+  type NewClientFormState,
+} from "@/components/clients/new-client-form";
 
 type Row = {
   id: string;
@@ -13,14 +23,63 @@ type Row = {
 };
 
 export default function TrainerClientsPage() {
-  const { data, loading } = useCachedGet<{ data: Row[] }>("/clients?pageSize=100", 60_000);
-  const rows = data?.data ?? [];
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<NewClientFormState>(() => defaultNewClientForm());
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await cachedApiGet<{ data: Row[] }>("/clients?pageSize=100", 60_000);
+      setRows(res.data);
+    } catch {
+      toast.error("Unable to load clients");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function createClient(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await api.post("/clients", buildCreateClientPayload(form, { omitTrainerId: true }));
+      toast.success("Client onboarded");
+      setOpen(false);
+      setForm(defaultNewClientForm());
+      invalidateApiCache("/clients");
+      load();
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === "object" && "response" in e
+          ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+          : undefined;
+      toast.error(msg ?? "Unable to create client");
+    }
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">My athletes</h1>
-        <p className="text-sm text-muted-foreground">Precision coaching lanes · immutable programming history.</p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">My athletes</h1>
+          <p className="text-sm text-muted-foreground">Precision coaching lanes · immutable programming history.</p>
+        </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button>Add client</Button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>New client</DialogTitle>
+            </DialogHeader>
+            <NewClientForm form={form} setForm={setForm} trainers={[]} onSubmit={createClient} hideTrainerPicker />
+          </DialogContent>
+        </Dialog>
       </div>
       <Card className="border-border/70">
         <CardHeader>

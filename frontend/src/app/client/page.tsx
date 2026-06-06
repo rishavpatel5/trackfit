@@ -62,10 +62,7 @@ export default function ClientDashboardPage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Button asChild variant="outline" className="h-auto flex-col gap-2 py-6 border-border">
-          <Link href="/client/workouts">Workouts</Link>
-        </Button>
+      <div className="grid gap-4 md:grid-cols-2">
         <Button asChild variant="outline" className="h-auto flex-col gap-2 py-6 border-border">
           <Link href="/client/diet">Nutrition</Link>
         </Button>

@@ -18,11 +18,6 @@ const ClientProgressTab = dynamic(
   { loading: () => <Skeleton className="h-96 w-full" /> },
 );
 
-const WorkoutPlanSection = dynamic(
-  () => import("@/components/clients/plan-editors").then((m) => ({ default: m.WorkoutPlanSection })),
-  { loading: () => <Skeleton className="h-64 w-full" /> },
-);
-
 const DietPlanSection = dynamic(
   () => import("@/components/clients/plan-editors").then((m) => ({ default: m.DietPlanSection })),
   { loading: () => <Skeleton className="h-64 w-full" /> },
@@ -111,9 +106,6 @@ export function ClientWorkspace({
           <TabsTrigger value="attendance" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
             Attendance
           </TabsTrigger>
-          <TabsTrigger value="workouts" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
-            Workout plan
-          </TabsTrigger>
           <TabsTrigger value="diet" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
             Diet plan
           </TabsTrigger>
@@ -187,25 +179,6 @@ export function ClientWorkspace({
 
         <TabsContent value="attendance">
           {tab === "attendance" ? <AttendanceTab clientId={clientId} /> : null}
-        </TabsContent>
-
-        <TabsContent value="workouts">
-          {tab === "workouts" ? (
-            <Card className="border-border/70">
-              <CardHeader>
-                <div className="space-y-1">
-                  <CardTitle>Periodized resistance roadmap</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Build mesocycles from scratch — add days, prescribe loading parameters, revise anytime. Weeks stay on record (trainers cannot
-                    delete locked history; admins can intervene if corrections are mandatory).
-                  </p>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <WorkoutPlanSection clientId={clientId} canEdit={canEdit} />
-              </CardContent>
-            </Card>
-          ) : null}
         </TabsContent>
 
         <TabsContent value="diet">

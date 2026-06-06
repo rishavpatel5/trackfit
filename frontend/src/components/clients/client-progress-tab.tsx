@@ -42,7 +42,7 @@ export type MeasurementRow = {
 
 type ProgressPhoto = {
   id: string;
-  type: "BEFORE" | "AFTER" | "WEEKLY";
+  type: "BEFORE" | "AFTER";
   url: string;
   weekNumber: number | null;
   createdAt: string;
@@ -126,26 +126,21 @@ export function ClientProgressTab({ clientId, canEdit }: { clientId: string; can
   const groupedByWeek = useMemo(() => {
     const map = new Map<
       string,
-      { label: string; measurements: MeasurementRow[]; weeklyPhotos: ProgressPhoto[]; entries: ProgressEntry[] }
+      { label: string; measurements: MeasurementRow[]; entries: ProgressEntry[] }
     >();
     for (const m of followups) {
       const key = groupingKeyMonday(m.recordedAt);
-      if (!map.has(key)) map.set(key, { label: weekLabelMonday(m.recordedAt), measurements: [], weeklyPhotos: [], entries: [] });
+      if (!map.has(key)) map.set(key, { label: weekLabelMonday(m.recordedAt), measurements: [], entries: [] });
       map.get(key)!.measurements.push(m);
-    }
-    for (const p of photos.filter((x) => x.type === "WEEKLY")) {
-      const key = groupingKeyMonday(p.createdAt);
-      if (!map.has(key)) map.set(key, { label: weekLabelMonday(p.createdAt), measurements: [], weeklyPhotos: [], entries: [] });
-      map.get(key)!.weeklyPhotos.push(p);
     }
     for (const e of entries) {
       const anchor = e.weekStartDate ?? e.createdAt;
       const key = groupingKeyMonday(anchor);
-      if (!map.has(key)) map.set(key, { label: weekLabelMonday(anchor), measurements: [], weeklyPhotos: [], entries: [] });
+      if (!map.has(key)) map.set(key, { label: weekLabelMonday(anchor), measurements: [], entries: [] });
       map.get(key)!.entries.push(e);
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [followups, photos, entries]);
+  }, [followups, entries]);
 
   const heroBefore = latestOfType(photos, "BEFORE");
   const heroAfter = latestOfType(photos, "AFTER");
@@ -239,7 +234,7 @@ export function ClientProgressTab({ clientId, canEdit }: { clientId: string; can
       <Card className="border-border/70">
         <CardHeader>
           <CardTitle>Weekly transformation checkpoints</CardTitle>
-          <CardDescription>Measurements, weekly captures, and coach commentary grouped per training week cycle.</CardDescription>
+          <CardDescription>Measurements and coach commentary grouped per training week cycle.</CardDescription>
         </CardHeader>
         <CardContent>
           {!baseline ? (
@@ -260,17 +255,10 @@ export function ClientProgressTab({ clientId, canEdit }: { clientId: string; can
                         <MeasurementGridView data={m} dense />
                       </div>
                     ))}
-                    {grp.weeklyPhotos.length > 0 ? (
-                      <div className="mb-6 flex flex-wrap gap-4">
-                        {grp.weeklyPhotos.map((ph) => (
-                          <WeeklyThumb key={ph.id} url={ph.url} label={`Weekly · optional W${ph.weekNumber ?? "-"}`} />
-                        ))}
-                      </div>
-                    ) : null}
                     {grp.entries.map((en) => (
                       <CoachNote key={en.id} entry={en} />
                     ))}
-                    {grp.measurements.length === 0 && grp.weeklyPhotos.length === 0 && grp.entries.length === 0 ? (
+                    {grp.measurements.length === 0 && grp.entries.length === 0 ? (
                       <p className="text-sm text-muted-foreground">Awaiting uploads for this week.</p>
                     ) : null}
                   </AccordionContent>
@@ -281,12 +269,7 @@ export function ClientProgressTab({ clientId, canEdit }: { clientId: string; can
         </CardContent>
       </Card>
 
-      {canEdit ? (
-        <>
-          <CoachWeeklyRecapCard clientId={clientId} onSaved={refresh} />
-          <WeeklyPhotoUploader clientId={clientId} onDone={refresh} />
-        </>
-      ) : null}
+      {canEdit ? <CoachWeeklyRecapCard clientId={clientId} onSaved={refresh} /> : null}
     </div>
   );
 }
@@ -418,15 +401,6 @@ function PhotoHero({
   );
 }
 
-function WeeklyThumb({ url, label }: { url: string; label: string }) {
-  return (
-    <div className="relative h-44 w-32 overflow-hidden rounded-xl border border-border">
-      <Image src={url} alt={label} fill className="object-cover" sizes="128px" />
-      <span className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5 text-[10px] text-white">{label}</span>
-    </div>
-  );
-}
-
 function CoachNote({ entry }: { entry: ProgressEntry }) {
   return (
     <div className="mb-4 rounded-xl border border-border bg-card p-4 last:mb-0">
@@ -485,7 +459,7 @@ function AttachPhotoInputs({
   onSaved,
 }: {
   clientId: string;
-  type: "BEFORE" | "AFTER" | "WEEKLY";
+  type: "BEFORE" | "AFTER";
   onSaved: () => void;
 }) {
   const [url, setUrl] = useState("");
@@ -532,84 +506,6 @@ function AttachPhotoInputs({
       </div>
       <Label className="text-xs text-muted-foreground">Upload file</Label>
       <Input type="file" accept="image/*" className="cursor-pointer text-sm" onChange={uploadFile} />
-    </div>
-  );
-}
-
-function WeeklyPhotoUploader({ clientId, onDone }: { clientId: string; onDone: () => void }) {
-  const [wk, setWk] = useState(1);
-  return (
-    <Card className="border-dashed border-border">
-      <CardHeader>
-        <CardTitle className="text-base">Optional weekly physique</CardTitle>
-        <CardDescription>Tag the training week index for chronological galleries.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap items-end gap-3">
-        <div>
-          <Label>Week #</Label>
-          <Input type="number" min={1} className="mt-1 w-24" value={wk} onChange={(e) => setWk(Number(e.target.value))} />
-        </div>
-        <div className="min-w-[200px] flex-1 space-y-1">
-          <Label>Upload + attach as WEEKLY</Label>
-          <Input
-            type="file"
-            accept="image/*"
-            className="cursor-pointer text-sm"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              const fd = new FormData();
-              fd.append("file", f);
-              fd.append("folder", `gvtrainer/progress/${clientId}/weekly`);
-              try {
-                const res = await api.post<{ url: string }>("/upload/image", fd);
-                await api.post(`/progress/clients/${clientId}/photos`, { type: "WEEKLY", weekNumber: wk, url: res.data.url });
-                toast.success("Weekly capture saved");
-                onDone();
-              } catch (err) {
-                uploadErrorToast(err, "Upload failed — paste URL variant still available below.");
-              } finally {
-                e.target.value = "";
-              }
-            }}
-          />
-        </div>
-        <WeeklyPasteUrl clientId={clientId} weekNumber={wk} onSaved={onDone} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function WeeklyPasteUrl({
-  clientId,
-  weekNumber,
-  onSaved,
-}: {
-  clientId: string;
-  weekNumber: number;
-  onSaved: () => void;
-}) {
-  const [u, setU] = useState("");
-  async function save() {
-    if (!u.startsWith("https://")) {
-      toast.error("HTTPS URLs only.");
-      return;
-    }
-    try {
-      await api.post(`/progress/clients/${clientId}/photos`, { type: "WEEKLY", weekNumber, url: u });
-      toast.success("Weekly photo captured");
-      setU("");
-      onSaved();
-    } catch {
-      toast.error("Failed");
-    }
-  }
-  return (
-    <div className="flex min-w-[220px] flex-1 gap-2">
-      <Input placeholder="Weekly photo URL (https)" value={u} onChange={(e) => setU(e.target.value)} />
-      <Button type="button" variant="outline" onClick={save}>
-        Save weekly URL
-      </Button>
     </div>
   );
 }
