@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ReportsTabToolbar } from "@/components/clients/reports-tab-content";
 import { AdminClientActions } from "@/components/clients/admin-client-actions";
+import { ClientBasicEditButton, type EditableClientBasics } from "@/components/clients/client-basic-edit-button";
 import { formatDateIST } from "@/lib/datetime";
 
 const ClientProgressTab = dynamic(
@@ -83,6 +84,13 @@ export function ClientWorkspace({
         </div>
         <div className="flex flex-col items-start gap-3 sm:items-end">
           <Badge variant="success">{remaining} sessions remaining</Badge>
+          {canEdit ? (
+            <ClientBasicEditButton
+              client={client as EditableClientBasics}
+              size="default"
+              onChanged={loadClient}
+            />
+          ) : null}
           {showAdminActions ? (
             <AdminClientActions
               clientId={client.id}

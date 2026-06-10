@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdminClientActions } from "@/components/clients/admin-client-actions";
+import { ClientBasicEditButton, type EditableClientBasics } from "@/components/clients/client-basic-edit-button";
 import { formatDateIST } from "@/lib/datetime";
 import {
   NewClientForm,
@@ -27,7 +28,12 @@ type ClientRow = {
   membershipEnd: string | null;
   totalSessions: number;
   goal: string | null;
-  user: { email: string; firstName: string; lastName: string };
+  medicalNotes: string | null;
+  emergencyContact: string | null;
+  emergencyPhone: string | null;
+  age: number | null;
+  gender: string | null;
+  user: { email: string; phone: string | null; firstName: string; lastName: string };
   trainer: { user: { firstName: string; lastName: string } };
 };
 
@@ -148,6 +154,7 @@ export default function AdminClientsPage() {
                     <TableCell>{c.totalSessions}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex flex-col items-end gap-2">
+                        <ClientBasicEditButton client={c as EditableClientBasics} onChanged={load} />
                         <AdminClientActions
                           clientId={c.id}
                           clientName={`${c.user.firstName} ${c.user.lastName}`}

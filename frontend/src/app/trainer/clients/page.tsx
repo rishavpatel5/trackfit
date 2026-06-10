@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientBasicEditButton, type EditableClientBasics } from "@/components/clients/client-basic-edit-button";
 import {
   NewClientForm,
   buildCreateClientPayload,
@@ -19,7 +20,12 @@ import {
 type Row = {
   id: string;
   goal: string | null;
-  user: { firstName: string; lastName: string; email: string };
+  medicalNotes: string | null;
+  emergencyContact: string | null;
+  emergencyPhone: string | null;
+  age: number | null;
+  gender: string | null;
+  user: { firstName: string; lastName: string; email: string; phone: string | null };
 };
 
 export default function TrainerClientsPage() {
@@ -96,9 +102,12 @@ export default function TrainerClientsPage() {
                 <div className="text-sm text-muted-foreground">{c.user.email}</div>
                 <div className="text-xs text-primary">{c.goal}</div>
               </div>
-              <Button asChild>
-                <Link href={`/trainer/clients/${c.id}`}>Open transformation workspace</Link>
-              </Button>
+              <div className="flex flex-wrap gap-2 md:justify-end">
+                <ClientBasicEditButton client={c as EditableClientBasics} onChanged={load} />
+                <Button asChild>
+                  <Link href={`/trainer/clients/${c.id}`}>Open transformation workspace</Link>
+                </Button>
+              </div>
             </div>
           ))}
         </CardContent>

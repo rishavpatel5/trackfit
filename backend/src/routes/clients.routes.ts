@@ -200,36 +200,52 @@ export function clientsRouter(env: Env) {
     }),
   );
 
-  const updateSchema = z.object({
-    trainerId: z.string().uuid().optional(),
+  const updateAllowed = requireRoles("ADMIN", "TRAINER");
+
+  const basicUpdateSchema = {
     age: z.number().int().optional(),
     gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
     emergencyContact: z.string().optional(),
     emergencyPhone: z.string().optional(),
     goal: z.string().optional(),
     medicalNotes: z.string().optional(),
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().email().optional(),
+  };
+
+  const adminUpdateSchema = z.object({
+    ...basicUpdateSchema,
+    trainerId: z.string().uuid().optional(),
     membershipStart: z.coerce.date().optional(),
     membershipEnd: z.coerce.date().optional(),
     totalSessions: z.number().int().nonnegative().optional(),
     sessionsCompleted: z.number().int().nonnegative().optional(),
     active: z.boolean().optional(),
-    firstName: z.string().optional(),
-    lastName: z.string().optional(),
-    phone: z.string().optional(),
-    email: z.string().email().optional(),
   });
+
+  const trainerUpdateSchema = z.object(basicUpdateSchema);
 
   r.patch(
     "/:id",
-    adminOnly,
+    updateAllowed,
     asyncHandler(async (req: AuthedRequest, res) => {
-      const body = updateSchema.parse(req.body);
+      const isAdmin = req.user!.role === "ADMIN";
+      const body = isAdmin ? adminUpdateSchema.parse(req.body) : trainerUpdateSchema.parse(req.body);
       const clientId = paramId(req.params, "id");
       const client = await prisma.profileClient.findUnique({
         where: { id: clientId },
         include: { user: true },
       });
       if (!client) throw new AppError(404, "Client not found");
+      if (!isAdmin) await assertClientAccess(req, clientId);
+
+      const nextEmail = body.email?.toLowerCase();
+      if (nextEmail && nextEmail !== client.user.email) {
+        const emailOwner = await prisma.user.findUnique({ where: { email: nextEmail } });
+        if (emailOwner && emailOwner.id !== client.userId) throw new AppError(409, "Email already registered");
+      }
       const oldSnap = structuredClone(client);
 
       const updated = await prisma.$transaction(async (tx) => {
@@ -239,24 +255,25 @@ export function clientsRouter(env: Env) {
             firstName: body.firstName,
             lastName: body.lastName,
             phone: body.phone,
-            email: body.email?.toLowerCase(),
-            active: body.active,
+            email: nextEmail,
+            active: isAdmin ? (body as z.infer<typeof adminUpdateSchema>).active : undefined,
           },
         });
+        const adminBody = isAdmin ? (body as z.infer<typeof adminUpdateSchema>) : undefined;
         return tx.profileClient.update({
           where: { id: client.id },
           data: {
-            trainerId: body.trainerId,
+            trainerId: adminBody?.trainerId,
             age: body.age,
             gender: body.gender,
             emergencyContact: body.emergencyContact,
             emergencyPhone: body.emergencyPhone,
             goal: body.goal,
             medicalNotes: body.medicalNotes,
-            membershipStart: body.membershipStart,
-            membershipEnd: body.membershipEnd,
-            totalSessions: body.totalSessions,
-            sessionsCompleted: body.sessionsCompleted,
+            membershipStart: adminBody?.membershipStart,
+            membershipEnd: adminBody?.membershipEnd,
+            totalSessions: adminBody?.totalSessions,
+            sessionsCompleted: adminBody?.sessionsCompleted,
           },
           include: { user: true, trainer: { include: { user: true } } },
         });
@@ -271,7 +288,8 @@ export function clientsRouter(env: Env) {
         newValue: updated,
       });
 
-      if (body.trainerId && body.trainerId !== client.trainerId) {
+      const trainerId = isAdmin ? (body as z.infer<typeof adminUpdateSchema>).trainerId : undefined;
+      if (trainerId && trainerId !== client.trainerId) {
         await notifyUser({
           userId: updated.userId,
           type: "WORKOUT_UPDATED",
