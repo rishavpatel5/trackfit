@@ -11,7 +11,7 @@ export default function TrainerDietHubPage() {
         <CardTitle>Nutrition command</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm text-muted-foreground">
-        <p>Macros roll up per day automatically inside each athlete workspace. Extend templates without deleting locked historical weeks.</p>
+        <p>Add and edit meals directly inside each athlete workspace. Daily macros roll up automatically.</p>
         <Button asChild>
           <Link href="/trainer/clients">Open athlete</Link>
         </Button>

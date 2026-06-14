@@ -194,9 +194,9 @@ export function ClientWorkspace({
             <Card className="border-border/70">
               <CardHeader>
                 <div className="space-y-1">
-                  <CardTitle>Nutrition architecture</CardTitle>
+                  <CardTitle>Nutrition plan</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Engineer meal-by-meal prescriptions with automatic macro rollup per day inside each week accordion.
+                    Meal-by-meal prescriptions with automatic daily macro rollup.
                   </p>
                 </div>
               </CardHeader>

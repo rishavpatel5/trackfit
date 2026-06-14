@@ -137,22 +137,20 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
     )
     .join("");
 
-  const dietBlocks = client.dietWeeks
-    .map((w) => {
-      const days = w.days
-        .map((d) => {
-          const meals = d.meals
-            .map(
-              (m) =>
-                `<li>${escapeHtml(m.foodName)} (${escapeHtml(m.quantity ?? "")}) — ${m.calories} kcal, P ${m.protein} / C ${m.carbs} / F ${m.fat}</li>`,
-            )
-            .join("");
-          return `<div style="margin-bottom:8px"><strong>${escapeHtml(d.label)}</strong><ul>${meals}</ul></div>`;
-        })
-        .join("");
-      return `<section style="page-break-inside:avoid;margin-bottom:16px;border:1px solid #eee;padding:12px;border-radius:8px"><h3>Diet Week ${w.weekNumber}</h3>${days}</section>`;
-    })
-    .join("");
+  const planWeek = client.dietWeeks.find((w) => w.weekNumber === 1) ?? client.dietWeeks[0];
+  const dietMeals = (planWeek?.days ?? [])
+    .flatMap((d) => d.meals.map((m) => ({ ...m, daySort: d.sortOrder })))
+    .sort((a, b) => a.daySort - b.daySort || a.sortOrder - b.sortOrder);
+
+  const dietBlocks =
+    dietMeals.length === 0
+      ? '<p style="color:#666;font-size:13px">No nutrition plan recorded.</p>'
+      : `<ul>${dietMeals
+          .map(
+            (m, i) =>
+              `<li><strong>${escapeHtml(m.slotLabel || `Meal ${i + 1}`)}</strong>: ${escapeHtml(m.foodName)} (${escapeHtml(m.quantity ?? "")}) — ${m.calories} kcal, P ${m.protein} / C ${m.carbs} / F ${m.fat}</li>`,
+          )
+          .join("")}</ul>`;
 
   const progressNotes = client.progressEntries
     .map(
@@ -222,7 +220,7 @@ export async function buildClientReportHtml(prisma: PrismaClient, clientId: stri
   ${weightChart}
   <h2>Measurements</h2>
   <table><thead><tr><th>Date</th><th>Weight</th><th>Body fat %</th><th>Waist</th></tr></thead><tbody>${rowsMeasurements}</tbody></table>
-  <h2>Diet history</h2>
+  <h2>Nutrition plan</h2>
   ${dietBlocks}
   <h2>Progress notes</h2>
   ${progressNotes}
