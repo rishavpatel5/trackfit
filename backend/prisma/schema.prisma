@@ -102,11 +102,15 @@ model ProfileClient {
   membershipEnd     DateTime?
   totalSessions     Int       @default(0)
   sessionsCompleted Int       @default(0)
+  dob               DateTime?
+
   /// Stable token for the single live PDF dossier link (regenerated on each view).
   reportToken       String?   @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  onboarding        ClientOnboarding?
 
   attendanceRecords AttendanceRecord[]
   workoutWeeks      WorkoutWeek[]
@@ -339,4 +343,46 @@ model PasswordResetToken {
   tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+model ClientOnboarding {
+  id                    String         @id @default(uuid())
+  clientId              String         @unique
+  client                ProfileClient  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Registration Form Fields
+  dob                   DateTime?
+  address               String?
+  city                  String?        @default("Surat")
+  state                 String?        @default("Gujarat")
+  zipcode               String?
+  secondaryPhone        String?
+  secondaryEmail        String?
+  amountPaid            Float?
+
+  // Gym Rules & Regulations Acceptance
+  rulesAccepted         Boolean        @default(true)
+  rulesAcceptedAt       DateTime       @default(now())
+  registrationSignature String?        @db.Text
+  registrationSignedAt  DateTime?
+
+  // PAR-Q (Physical Activity Readiness Questionnaire)
+  parqHeartCondition    Boolean        @default(false)
+  parqChestPainActivity Boolean        @default(false)
+  parqChestPainRest     Boolean        @default(false)
+  parqDizziness         Boolean        @default(false)
+  parqBoneJoint         Boolean        @default(false)
+  parqBloodPressureDrugs Boolean       @default(false)
+  parqOtherReason       Boolean        @default(false)
+  parqCleared           Boolean        @default(true)
+  parqNotes             String?
+  parqSignature         String?        @db.Text
+  parqSignedAt          DateTime?
+
+  // Minor Declaration (<18 years)
+  isMinor               Boolean        @default(false)
+  guardianName          String?
+
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 }

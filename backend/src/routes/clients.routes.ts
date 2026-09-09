@@ -96,6 +96,7 @@ export function clientsRouter(env: Env) {
     phone: z.string().optional(),
     age: z.number().int().optional(),
     gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
+    dob: z.coerce.date().optional(),
     emergencyContact: z.string().optional(),
     emergencyPhone: z.string().optional(),
     goal: z.string().optional(),
@@ -103,6 +104,27 @@ export function clientsRouter(env: Env) {
     membershipStart: z.coerce.date(),
     totalSessions: z.number().int().positive(),
     sessionsCompleted: z.number().int().nonnegative().optional(),
+
+    // Onboarding Form & PAR-Q Fields
+    address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zipcode: z.string().optional(),
+    secondaryPhone: z.string().optional(),
+    secondaryEmail: z.string().email().optional().or(z.literal("")),
+    amountPaid: z.coerce.number().optional(),
+    rulesAccepted: z.boolean().optional(),
+    registrationSignature: z.string().optional(),
+    parqHeartCondition: z.boolean().optional(),
+    parqChestPainActivity: z.boolean().optional(),
+    parqChestPainRest: z.boolean().optional(),
+    parqDizziness: z.boolean().optional(),
+    parqBoneJoint: z.boolean().optional(),
+    parqBloodPressureDrugs: z.boolean().optional(),
+    parqOtherReason: z.boolean().optional(),
+    parqNotes: z.string().optional(),
+    parqSignature: z.string().optional(),
+    guardianName: z.string().optional(),
   };
 
   const createSchemaAdmin = z.object({
@@ -143,12 +165,14 @@ export function clientsRouter(env: Env) {
             phone: body.phone,
           },
         });
-        return tx.profileClient.create({
+
+        const profile = await tx.profileClient.create({
           data: {
             userId: user.id,
             trainerId,
             age: body.age,
             gender: body.gender,
+            dob: body.dob,
             emergencyContact: body.emergencyContact,
             emergencyPhone: body.emergencyPhone,
             goal: body.goal,
@@ -161,6 +185,50 @@ export function clientsRouter(env: Env) {
           },
           include: { user: true, trainer: { include: { user: true } } },
         });
+
+        const isMinor = body.age ? body.age < 18 : false;
+        const parqCleared = !(
+          body.parqHeartCondition ||
+          body.parqChestPainActivity ||
+          body.parqChestPainRest ||
+          body.parqDizziness ||
+          body.parqBoneJoint ||
+          body.parqBloodPressureDrugs ||
+          body.parqOtherReason
+        );
+
+        const onboarding = await tx.clientOnboarding.create({
+          data: {
+            clientId: profile.id,
+            dob: body.dob,
+            address: body.address,
+            city: body.city || "Surat",
+            state: body.state || "Gujarat",
+            zipcode: body.zipcode,
+            secondaryPhone: body.secondaryPhone,
+            secondaryEmail: body.secondaryEmail || undefined,
+            amountPaid: body.amountPaid,
+            rulesAccepted: body.rulesAccepted ?? true,
+            rulesAcceptedAt: new Date(),
+            registrationSignature: body.registrationSignature,
+            registrationSignedAt: body.registrationSignature ? new Date() : undefined,
+            parqHeartCondition: body.parqHeartCondition ?? false,
+            parqChestPainActivity: body.parqChestPainActivity ?? false,
+            parqChestPainRest: body.parqChestPainRest ?? false,
+            parqDizziness: body.parqDizziness ?? false,
+            parqBoneJoint: body.parqBoneJoint ?? false,
+            parqBloodPressureDrugs: body.parqBloodPressureDrugs ?? false,
+            parqOtherReason: body.parqOtherReason ?? false,
+            parqCleared,
+            parqNotes: body.parqNotes,
+            parqSignature: body.parqSignature,
+            parqSignedAt: body.parqSignature ? new Date() : undefined,
+            isMinor,
+            guardianName: body.guardianName,
+          },
+        });
+
+        return { ...profile, onboarding };
       });
 
       await writeAudit({
@@ -192,11 +260,118 @@ export function clientsRouter(env: Env) {
         include: {
           user: true,
           trainer: { include: { user: true } },
+          onboarding: true,
         },
       });
       if (!client) throw new AppError(404, "Client not found");
       client.sessionsCompleted = await syncSessionsCompleted(client.id);
       res.json(client);
+    }),
+  );
+
+  const onboardingUpdateSchema = z.object({
+    dob: z.coerce.date().optional(),
+    address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zipcode: z.string().optional(),
+    secondaryPhone: z.string().optional(),
+    secondaryEmail: z.string().email().optional().or(z.literal("")),
+    amountPaid: z.coerce.number().optional(),
+    rulesAccepted: z.boolean().optional(),
+    registrationSignature: z.string().optional(),
+    parqHeartCondition: z.boolean().optional(),
+    parqChestPainActivity: z.boolean().optional(),
+    parqChestPainRest: z.boolean().optional(),
+    parqDizziness: z.boolean().optional(),
+    parqBoneJoint: z.boolean().optional(),
+    parqBloodPressureDrugs: z.boolean().optional(),
+    parqOtherReason: z.boolean().optional(),
+    parqNotes: z.string().optional(),
+    parqSignature: z.string().optional(),
+    guardianName: z.string().optional(),
+  });
+
+  r.patch(
+    "/:id/onboarding",
+    requireRoles("ADMIN", "TRAINER"),
+    asyncHandler(async (req: AuthedRequest, res) => {
+      const clientId = paramId(req.params, "id");
+      await assertClientAccess(req, clientId);
+      const body = onboardingUpdateSchema.parse(req.body);
+
+      const client = await prisma.profileClient.findUnique({ where: { id: clientId } });
+      if (!client) throw new AppError(404, "Client not found");
+
+      const isMinor = client.age ? client.age < 18 : false;
+      const parqCleared = !(
+        body.parqHeartCondition ||
+        body.parqChestPainActivity ||
+        body.parqChestPainRest ||
+        body.parqDizziness ||
+        body.parqBoneJoint ||
+        body.parqBloodPressureDrugs ||
+        body.parqOtherReason
+      );
+
+      const onboarding = await prisma.clientOnboarding.upsert({
+        where: { clientId },
+        create: {
+          clientId,
+          dob: body.dob,
+          address: body.address,
+          city: body.city || "Surat",
+          state: body.state || "Gujarat",
+          zipcode: body.zipcode,
+          secondaryPhone: body.secondaryPhone,
+          secondaryEmail: body.secondaryEmail || undefined,
+          amountPaid: body.amountPaid,
+          rulesAccepted: body.rulesAccepted ?? true,
+          rulesAcceptedAt: new Date(),
+          registrationSignature: body.registrationSignature,
+          registrationSignedAt: body.registrationSignature ? new Date() : undefined,
+          parqHeartCondition: body.parqHeartCondition ?? false,
+          parqChestPainActivity: body.parqChestPainActivity ?? false,
+          parqChestPainRest: body.parqChestPainRest ?? false,
+          parqDizziness: body.parqDizziness ?? false,
+          parqBoneJoint: body.parqBoneJoint ?? false,
+          parqBloodPressureDrugs: body.parqBloodPressureDrugs ?? false,
+          parqOtherReason: body.parqOtherReason ?? false,
+          parqCleared,
+          parqNotes: body.parqNotes,
+          parqSignature: body.parqSignature,
+          parqSignedAt: body.parqSignature ? new Date() : undefined,
+          isMinor,
+          guardianName: body.guardianName,
+        },
+        update: {
+          ...(body.dob !== undefined ? { dob: body.dob } : {}),
+          ...(body.address !== undefined ? { address: body.address } : {}),
+          ...(body.city !== undefined ? { city: body.city } : {}),
+          ...(body.state !== undefined ? { state: body.state } : {}),
+          ...(body.zipcode !== undefined ? { zipcode: body.zipcode } : {}),
+          ...(body.secondaryPhone !== undefined ? { secondaryPhone: body.secondaryPhone } : {}),
+          ...(body.secondaryEmail !== undefined ? { secondaryEmail: body.secondaryEmail || null } : {}),
+          ...(body.amountPaid !== undefined ? { amountPaid: body.amountPaid } : {}),
+          ...(body.rulesAccepted !== undefined ? { rulesAccepted: body.rulesAccepted } : {}),
+          ...(body.registrationSignature !== undefined
+            ? { registrationSignature: body.registrationSignature, registrationSignedAt: new Date() }
+            : {}),
+          ...(body.parqHeartCondition !== undefined ? { parqHeartCondition: body.parqHeartCondition } : {}),
+          ...(body.parqChestPainActivity !== undefined ? { parqChestPainActivity: body.parqChestPainActivity } : {}),
+          ...(body.parqChestPainRest !== undefined ? { parqChestPainRest: body.parqChestPainRest } : {}),
+          ...(body.parqDizziness !== undefined ? { parqDizziness: body.parqDizziness } : {}),
+          ...(body.parqBoneJoint !== undefined ? { parqBoneJoint: body.parqBoneJoint } : {}),
+          ...(body.parqBloodPressureDrugs !== undefined ? { parqBloodPressureDrugs: body.parqBloodPressureDrugs } : {}),
+          ...(body.parqOtherReason !== undefined ? { parqOtherReason: body.parqOtherReason } : {}),
+          parqCleared,
+          ...(body.parqNotes !== undefined ? { parqNotes: body.parqNotes } : {}),
+          ...(body.parqSignature !== undefined ? { parqSignature: body.parqSignature, parqSignedAt: new Date() } : {}),
+          ...(body.guardianName !== undefined ? { guardianName: body.guardianName } : {}),
+        },
+      });
+
+      res.json(onboarding);
     }),
   );
 

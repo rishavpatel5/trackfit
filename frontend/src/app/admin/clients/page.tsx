@@ -105,9 +105,9 @@ export default function AdminClientsPage() {
           <DialogTrigger asChild>
             <Button>Add client</Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+          <DialogContent className="max-h-[92vh] max-w-2xl sm:max-w-3xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>New client</DialogTitle>
+              <DialogTitle>Client Digital Onboarding</DialogTitle>
             </DialogHeader>
             <NewClientForm form={form} setForm={setForm} trainers={trainers} onSubmit={createClient} />
           </DialogContent>

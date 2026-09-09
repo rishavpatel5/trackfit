@@ -13,6 +13,7 @@ import { ReportsTabToolbar } from "@/components/clients/reports-tab-content";
 import { AdminClientActions } from "@/components/clients/admin-client-actions";
 import { ClientBasicEditButton, type EditableClientBasics } from "@/components/clients/client-basic-edit-button";
 import { formatDateIST } from "@/lib/datetime";
+import { ClientOnboardingTab, type OnboardingData } from "@/components/clients/client-onboarding-tab";
 
 const ClientProgressTab = dynamic(
   () => import("@/components/clients/client-progress-tab").then((m) => ({ default: m.ClientProgressTab })),
@@ -32,12 +33,14 @@ type ClientDetail = {
   emergencyPhone: string | null;
   age: number | null;
   gender: string | null;
+  dob?: string | null;
   membershipStart: string | null;
   membershipEnd: string | null;
   totalSessions: number;
   sessionsCompleted: number;
   user: { email: string; phone: string | null; firstName: string; lastName: string };
   trainer: { user: { firstName: string; lastName: string } };
+  onboarding?: OnboardingData | null;
 };
 
 export function ClientWorkspace({
@@ -119,6 +122,9 @@ export function ClientWorkspace({
           </TabsTrigger>
           <TabsTrigger value="progress" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
             Progress
+          </TabsTrigger>
+          <TabsTrigger value="onboarding" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
+            Onboarding & PAR-Q
           </TabsTrigger>
           <TabsTrigger value="reports" className="max-sm:snap-start max-sm:px-2.5 max-sm:text-xs">
             Reports
@@ -209,6 +215,10 @@ export function ClientWorkspace({
 
         <TabsContent value="progress">
           {tab === "progress" ? <ClientProgressTab clientId={clientId} canEdit={canEdit} /> : null}
+        </TabsContent>
+
+        <TabsContent value="onboarding">
+          <ClientOnboardingTab client={client} />
         </TabsContent>
 
         <TabsContent value="reports">
